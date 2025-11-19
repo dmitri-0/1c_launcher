@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from services.base_reader import BaseReader
 from config import IBASES_PATH, ENCODING
 import subprocess
+import os
 from pathlib import Path
 import platform
 
@@ -173,66 +174,128 @@ class TreeWindow(QMainWindow):
         key = (parent_row, row)
         return self.bases_dict.get(key)
 
+    def _launch_1c_process(self, executable, mode, database):
+        """
+        Универсальный метод запуска 1С
+        mode: 'ENTERPRISE' или 'DESIGNER'
+        """
+        try:
+            # Формируем параметры командной строки
+            params = [mode]
+            
+            # Добавляем строку подключения
+            if database.connect:
+                params.append(f"/S{database.connect}")
+            
+            # Добавляем пользователя, если задан
+            if database.usr:
+                params.append(f"/N{database.usr}")
+            
+            # Добавляем пароль, если задан
+            if database.pwd:
+                params.append(f"/P{database.pwd}")
+            
+            # Собираем полную команду
+            cmd_line = f'"{executable}" ' + ' '.join(f'"{p}"' if ' ' in p else p for p in params)
+            
+            # Выводим команду в консоль для отладки
+            print("\n" + "="*80)
+            print(f"КОМАНДА ЗАПУСКА 1С ({mode}):")
+            print(cmd_line)
+            print("="*80 + "\n")
+            
+            if platform.system() == 'Windows':
+                # МЕТОД 1: Используем os.startfile (работает как двойной клик в проводнике)
+                try:
+                    # Создаем временный .bat файл для запуска
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False, encoding='cp866') as bat_file:
+                        bat_file.write('@echo off\n')
+                        bat_file.write(f'start "" {cmd_line}\n')
+                        bat_file.write('exit\n')
+                        bat_path = bat_file.name
+                    
+                    # Запускаем bat-файл через os.startfile
+                    os.startfile(bat_path)
+                    
+                    # Удаляем временный файл через несколько секунд
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(3000, lambda: self._cleanup_temp_file(bat_path))
+                    
+                    return True
+                    
+                except Exception as e:
+                    print(f"МЕТОД 1 (os.startfile) не сработал: {e}")
+                    
+                    # МЕТОД 2: Используем subprocess с правильными флагами
+                    try:
+                        # Используем shell=True для правильной обработки параметров
+                        subprocess.Popen(
+                            cmd_line,
+                            shell=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            stdin=subprocess.DEVNULL,
+                            creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_BREAKAWAY_FROM_JOB
+                        )
+                        return True
+                    except Exception as e2:
+                        print(f"МЕТОД 2 (subprocess с shell) не сработал: {e2}")
+                        
+                        # МЕТОД 3: Прямой запуск через subprocess без DETACHED_PROCESS
+                        try:
+                            command = [str(executable)] + params
+                            subprocess.Popen(
+                                command,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                stdin=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NEW_CONSOLE
+                            )
+                            return True
+                        except Exception as e3:
+                            print(f"МЕТОД 3 (subprocess без detached) не сработал: {e3}")
+                            raise e3
+            else:
+                # Для Linux/Mac
+                command = [str(executable)] + params
+                subprocess.Popen(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                )
+                return True
+                
+        except Exception as e:
+            print(f"ВСЕ МЕТОДЫ ЗАПУСКА НЕ СРАБОТАЛИ: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def _cleanup_temp_file(self, filepath):
+        """Удаляет временный файл"""
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        except:
+            pass
+
     def open_database(self):
         """Открыть базу (F3)"""
         database = self.get_selected_database()
         if not database:
             return
         
-        try:
-            executable = self._get_1c_executable(database)
-            if not executable:
-                self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
-                return
-            
-            # Формируем команду как список аргументов (правильный способ для subprocess)
-            command = [str(executable), "ENTERPRISE"]
-            
-            # Добавляем строку подключения
-            if database.connect:
-                command.append(f"/S{database.connect}")
-            
-            # Добавляем пользователя, если задан
-            if database.usr:
-                command.append(f"/N{database.usr}")
-            
-            # Добавляем пароль, если задан
-            if database.pwd:
-                command.append(f"/P{database.pwd}")
-            
-            # Выводим команду в консоль для отладки
-            print("\n" + "="*80)
-            print("КОМАНДА ЗАПУСКА 1С (F3):")
-            print(" ".join(command))
-            print("="*80 + "\n")
-            
-            # Настройки для скрытого запуска процесса
-            startupinfo = None
-            creationflags = 0
-            
-            if platform.system() == 'Windows':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-                # CREATE_NO_WINDOW предотвращает создание консольного окна
-                creationflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-            
-            subprocess.Popen(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                startupinfo=startupinfo,
-                creationflags=creationflags,
-                close_fds=True
-            )
-            
+        executable = self._get_1c_executable(database)
+        if not executable:
+            self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
+            return
+        
+        if self._launch_1c_process(executable, "ENTERPRISE", database):
             self.statusBar.showMessage(f"✅ База {database.name} запущена")
-        except Exception as e:
-            print(f"ОШИБКА: {e}")
-            import traceback
-            traceback.print_exc()
-            self.statusBar.showMessage(f"❌ Ошибка при запуске: {e}")
+        else:
+            self.statusBar.showMessage(f"❌ Ошибка при запуске базы {database.name}")
 
     def open_configurator(self):
         """Открыть конфигуратор (F4)"""
@@ -240,60 +303,15 @@ class TreeWindow(QMainWindow):
         if not database:
             return
         
-        try:
-            executable = self._get_1c_executable(database)
-            if not executable:
-                self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
-                return
-            
-            # Формируем команду как список аргументов (правильный способ для subprocess)
-            command = [str(executable), "DESIGNER"]
-            
-            # Добавляем строку подключения
-            if database.connect:
-                command.append(f"/S{database.connect}")
-            
-            # Добавляем пользователя, если задан
-            if database.usr:
-                command.append(f"/N{database.usr}")
-            
-            # Добавляем пароль, если задан
-            if database.pwd:
-                command.append(f"/P{database.pwd}")
-            
-            # Выводим команду в консоль для отладки
-            print("\n" + "="*80)
-            print("КОМАНДА ЗАПУСКА КОНФИГУРАТОРА (F4):")
-            print(" ".join(command))
-            print("="*80 + "\n")
-            
-            # Настройки для скрытого запуска процесса
-            startupinfo = None
-            creationflags = 0
-            
-            if platform.system() == 'Windows':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-                # CREATE_NO_WINDOW предотвращает создание консольного окна
-                creationflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-            
-            subprocess.Popen(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                startupinfo=startupinfo,
-                creationflags=creationflags,
-                close_fds=True
-            )
-            
+        executable = self._get_1c_executable(database)
+        if not executable:
+            self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
+            return
+        
+        if self._launch_1c_process(executable, "DESIGNER", database):
             self.statusBar.showMessage(f"✅ Конфигуратор для {database.name} запущен")
-        except Exception as e:
-            print(f"ОШИБКА: {e}")
-            import traceback
-            traceback.print_exc()
-            self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора: {e}")
+        else:
+            self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
 
     def copy_connection_string(self):
         """Копировать строку подключения (Ctrl+C)"""
