@@ -1,4 +1,4 @@
-﻿# gui/main_tree_window.py
+# gui/main_tree_window.py
 
 from PySide6.QtWidgets import (QMainWindow, QTreeView, QVBoxLayout, QWidget, 
                                QStatusBar, QDialog, QVBoxLayout as QVBoxLayoutDialog,
@@ -185,13 +185,24 @@ class TreeWindow(QMainWindow):
                 self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
                 return
             
-            command = [str(executable), "ENTERPRISE", f"/IBConnectionString{database.connect}"]
+            # Очищаем строку подключения от лишних слешей
+            connect_string = database.connect.replace('\\\\', '//')
+            connect_string = connect_string.strip('\\')
+            
+            # ИСПРАВЛЕНО: добавлен знак = между параметром и значением
+            command = [str(executable), "ENTERPRISE", f"/IBConnectionString={connect_string}"]
             
             # Добавляем пользователя и пароль, если они заданы
             if database.usr:
                 command.append(f"/N{database.usr}")
             if database.pwd:
                 command.append(f"/P{database.pwd}")
+            
+            # Выводим команду в консоль для отладки
+            print("\n" + "="*80)
+            print("КОМАНДА ЗАПУСКА 1С (F3):")
+            print(" ".join(command))
+            print("="*80 + "\n")
             
             subprocess.Popen(command, 
                            stdout=subprocess.DEVNULL,
@@ -200,6 +211,7 @@ class TreeWindow(QMainWindow):
             
             self.statusBar.showMessage(f"✅ База {database.name} запущена")
         except Exception as e:
+            print(f"ОШИБКА: {e}")
             self.statusBar.showMessage(f"❌ Ошибка при запуске: {e}")
 
     def open_configurator(self):
@@ -214,13 +226,24 @@ class TreeWindow(QMainWindow):
                 self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
                 return
             
-            command = [str(executable), "DESIGNER", f"/IBConnectionString{database.connect}"]
+            # Очищаем строку подключения от лишних слешей
+            connect_string = database.connect.replace('\\\\', '//')
+            connect_string = connect_string.strip('\\')
+            
+            # ИСПРАВЛЕНО: добавлен знак = между параметром и значением
+            command = [str(executable), "DESIGNER", f"/IBConnectionString={connect_string}"]
             
             # Добавляем пользователя и пароль, если они заданы
             if database.usr:
                 command.append(f"/N{database.usr}")
             if database.pwd:
                 command.append(f"/P{database.pwd}")
+            
+            # Выводим команду в консоль для отладки
+            print("\n" + "="*80)
+            print("КОМАНДА ЗАПУСКА КОНФИГУРАТОРА (F4):")
+            print(" ".join(command))
+            print("="*80 + "\n")
             
             subprocess.Popen(command, 
                            stdout=subprocess.DEVNULL,
@@ -229,6 +252,7 @@ class TreeWindow(QMainWindow):
             
             self.statusBar.showMessage(f"✅ Конфигуратор для {database.name} запущен")
         except Exception as e:
+            print(f"ОШИБКА: {e}")
             self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора: {e}")
 
     def copy_connection_string(self):
