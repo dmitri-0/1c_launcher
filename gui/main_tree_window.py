@@ -110,7 +110,7 @@ class TreeWindow(QMainWindow):
         self.setStatusBar(self.statusBar)
         
         self.bases_dict = {}  # Словарь для быстрого поиска баз по индексу
-        self.all_bases = []   # Добавьте эту строку - список всех баз в памяти
+        self.all_bases = []   # Список всех баз в памяти
 
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels([
@@ -189,8 +189,8 @@ class TreeWindow(QMainWindow):
             connect_string = database.connect.replace('\\\\', '//')
             connect_string = connect_string.strip('\\')
             
-            # ИСПРАВЛЕНО: добавлен знак = между параметром и значением
-            command = [str(executable), "ENTERPRISE", f"/IBConnectionString={connect_string}"]
+            # ИСПРАВЛЕНО: строка подключения в кавычках как один аргумент
+            command = [str(executable), "ENTERPRISE", f'/IBConnectionString={connect_string}']
             
             # Добавляем пользователя и пароль, если они заданы
             if database.usr:
@@ -201,7 +201,7 @@ class TreeWindow(QMainWindow):
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
             print("КОМАНДА ЗАПУСКА 1С (F3):")
-            print(" ".join(command))
+            print(" ".join(f'"{arg}"' if ' ' in arg else arg for arg in command))
             print("="*80 + "\n")
             
             subprocess.Popen(command, 
@@ -230,8 +230,8 @@ class TreeWindow(QMainWindow):
             connect_string = database.connect.replace('\\\\', '//')
             connect_string = connect_string.strip('\\')
             
-            # ИСПРАВЛЕНО: добавлен знак = между параметром и значением
-            command = [str(executable), "DESIGNER", f"/IBConnectionString={connect_string}"]
+            # ИСПРАВЛЕНО: строка подключения в кавычках как один аргумент
+            command = [str(executable), "DESIGNER", f'/IBConnectionString={connect_string}']
             
             # Добавляем пользователя и пароль, если они заданы
             if database.usr:
@@ -242,7 +242,7 @@ class TreeWindow(QMainWindow):
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
             print("КОМАНДА ЗАПУСКА КОНФИГУРАТОРА (F4):")
-            print(" ".join(command))
+            print(" ".join(f'"{arg}"' if ' ' in arg else arg for arg in command))
             print("="*80 + "\n")
             
             subprocess.Popen(command, 
