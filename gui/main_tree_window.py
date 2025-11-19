@@ -198,7 +198,7 @@ class TreeWindow(QMainWindow):
             
             # Добавляем пароль, если задан
             if database.pwd:
-                command.append(f'/P{database.pwd}')
+                command.append(f'/P"{database.pwd}"')
             
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
