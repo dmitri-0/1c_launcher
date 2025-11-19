@@ -185,23 +185,25 @@ class TreeWindow(QMainWindow):
                 self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
                 return
             
-            # Очищаем строку подключения от лишних слешей
-            connect_string = database.connect.replace('\\\\', '//')
-            connect_string = connect_string.strip('\\')
+            # Формируем команду в формате: 1cv8.exe ENTERPRISE /S"строка_подключения" /N"пользователь" /Pпароль
+            command = [str(executable), "ENTERPRISE"]
             
-            # ИСПРАВЛЕНО: строка подключения в кавычках как один аргумент
-            command = [str(executable), "ENTERPRISE", f'/IBConnectionString={connect_string}']
+            # Добавляем строку подключения с параметром /S
+            if database.connect:
+                command.append(f'/S"{database.connect}"')
             
-            # Добавляем пользователя и пароль, если они заданы
+            # Добавляем пользователя, если задан
             if database.usr:
-                command.append(f"/N{database.usr}")
+                command.append(f'/N"{database.usr}"')
+            
+            # Добавляем пароль, если задан
             if database.pwd:
-                command.append(f"/P{database.pwd}")
+                command.append(f'/P{database.pwd}')
             
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
             print("КОМАНДА ЗАПУСКА 1С (F3):")
-            print(" ".join(f'"{arg}"' if ' ' in arg else arg for arg in command))
+            print(" ".join(command))
             print("="*80 + "\n")
             
             subprocess.Popen(command, 
@@ -226,23 +228,25 @@ class TreeWindow(QMainWindow):
                 self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
                 return
             
-            # Очищаем строку подключения от лишних слешей
-            connect_string = database.connect.replace('\\\\', '//')
-            connect_string = connect_string.strip('\\')
+            # Формируем команду в формате: 1cv8.exe DESIGNER /S"строка_подключения" /N"пользователь" /Pпароль
+            command = [str(executable), "DESIGNER"]
             
-            # ИСПРАВЛЕНО: строка подключения в кавычках как один аргумент
-            command = [str(executable), "DESIGNER", f'/IBConnectionString={connect_string}']
+            # Добавляем строку подключения с параметром /S
+            if database.connect:
+                command.append(f'/S"{database.connect}"')
             
-            # Добавляем пользователя и пароль, если они заданы
+            # Добавляем пользователя, если задан
             if database.usr:
-                command.append(f"/N{database.usr}")
+                command.append(f'/N"{database.usr}"')
+            
+            # Добавляем пароль, если задан
             if database.pwd:
-                command.append(f"/P{database.pwd}")
+                command.append(f'/P{database.pwd}')
             
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
             print("КОМАНДА ЗАПУСКА КОНФИГУРАТОРА (F4):")
-            print(" ".join(f'"{arg}"' if ' ' in arg else arg for arg in command))
+            print(" ".join(command))
             print("="*80 + "\n")
             
             subprocess.Popen(command, 
