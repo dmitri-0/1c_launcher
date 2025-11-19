@@ -110,7 +110,8 @@ class TreeWindow(QMainWindow):
         self.setStatusBar(self.statusBar)
         
         self.bases_dict = {}  # Словарь для быстрого поиска баз по индексу
-        
+        self.all_bases = []   # Добавьте эту строку - список всех баз в памяти
+
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels([
             "Имя базы", "Папка", "Тип подключения", "Connect", "Версия"
@@ -312,13 +313,9 @@ class TreeWindow(QMainWindow):
     def save_bases(self):
         """Сохраняет базы в файл ibases.v8i"""
         try:
-            # Читаем все базы
-            reader = BaseReader(IBASES_PATH, ENCODING)
-            bases = reader.read_bases()
-            
-            # Записываем обратно
+            # Записываем базы из памяти, а не перечитываем из файла
             with open(IBASES_PATH, 'w', encoding=ENCODING) as f:
-                for base in bases:
+                for base in self.all_bases:
                     f.write(f"[{base.name}]\n")
                     f.write(f"ID={base.id}\n")
                     f.write(f"Connect={base.connect}\n")
@@ -347,6 +344,9 @@ class TreeWindow(QMainWindow):
         from collections import defaultdict
         reader = BaseReader(IBASES_PATH, ENCODING)
         bases = reader.read_bases()
+        
+        # Сохраняем список баз в памяти
+        self.all_bases = bases
         
         self.model.removeRows(0, self.model.rowCount())
         self.bases_dict.clear()
