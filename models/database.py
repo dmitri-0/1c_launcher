@@ -12,6 +12,8 @@ class Database1C:
     version: Optional[str] = None
     app_arch: Optional[str] = None  # Разрядность: x86 или x86_64
     order_in_tree: Optional[float] = None  # Порядок в дереве
+    usr: Optional[str] = None  # Имя пользователя
+    pwd: Optional[str] = None  # Пароль
     
     def __str__(self):
         return self.name

@@ -78,7 +78,9 @@ class BaseReader:
             app=data.get('App', None),
             version=data.get('Version', None),
             app_arch=data.get('AppArch', None),  # Разрядность
-            order_in_tree=order_in_tree
+            order_in_tree=order_in_tree,
+            usr=data.get('Usr', None),  # Пользователь
+            pwd=data.get('Pwd', None)   # Пароль
         )
     
     def print_bases_list(self, bases: List[Database1C]):
