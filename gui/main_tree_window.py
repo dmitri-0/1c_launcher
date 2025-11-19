@@ -185,20 +185,20 @@ class TreeWindow(QMainWindow):
                 self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
                 return
             
-            # Формируем команду в формате: 1cv8.exe ENTERPRISE /S"строка_подключения" /N"пользователь" /Pпароль
+            # Формируем команду как список аргументов (правильный способ для subprocess)
             command = [str(executable), "ENTERPRISE"]
             
-            # Добавляем строку подключения с параметром /S
+            # Добавляем строку подключения
             if database.connect:
-                command.append(f'/S"{database.connect}"')
+                command.append(f"/S{database.connect}")
             
             # Добавляем пользователя, если задан
             if database.usr:
-                command.append(f'/N"{database.usr}"')
+                command.append(f"/N{database.usr}")
             
             # Добавляем пароль, если задан
             if database.pwd:
-                command.append(f'/P"{database.pwd}"')
+                command.append(f"/P{database.pwd}")
             
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
@@ -206,14 +206,32 @@ class TreeWindow(QMainWindow):
             print(" ".join(command))
             print("="*80 + "\n")
             
-            subprocess.Popen(command, 
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL,
-                           creationflags=subprocess.DETACHED_PROCESS if platform.system() == 'Windows' else 0)
+            # Настройки для скрытого запуска процесса
+            startupinfo = None
+            creationflags = 0
+            
+            if platform.system() == 'Windows':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                # CREATE_NO_WINDOW предотвращает создание консольного окна
+                creationflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+            
+            subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                startupinfo=startupinfo,
+                creationflags=creationflags,
+                close_fds=True
+            )
             
             self.statusBar.showMessage(f"✅ База {database.name} запущена")
         except Exception as e:
             print(f"ОШИБКА: {e}")
+            import traceback
+            traceback.print_exc()
             self.statusBar.showMessage(f"❌ Ошибка при запуске: {e}")
 
     def open_configurator(self):
@@ -228,20 +246,20 @@ class TreeWindow(QMainWindow):
                 self.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
                 return
             
-            # Формируем команду в формате: 1cv8.exe DESIGNER /S"строка_подключения" /N"пользователь" /Pпароль
+            # Формируем команду как список аргументов (правильный способ для subprocess)
             command = [str(executable), "DESIGNER"]
             
-            # Добавляем строку подключения с параметром /S
+            # Добавляем строку подключения
             if database.connect:
-                command.append(f'/S"{database.connect}"')
+                command.append(f"/S{database.connect}")
             
             # Добавляем пользователя, если задан
             if database.usr:
-                command.append(f'/N"{database.usr}"')
+                command.append(f"/N{database.usr}")
             
             # Добавляем пароль, если задан
             if database.pwd:
-                command.append(f'/P{database.pwd}')
+                command.append(f"/P{database.pwd}")
             
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
@@ -249,14 +267,32 @@ class TreeWindow(QMainWindow):
             print(" ".join(command))
             print("="*80 + "\n")
             
-            subprocess.Popen(command, 
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL,
-                           creationflags=subprocess.DETACHED_PROCESS if platform.system() == 'Windows' else 0)
+            # Настройки для скрытого запуска процесса
+            startupinfo = None
+            creationflags = 0
+            
+            if platform.system() == 'Windows':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                # CREATE_NO_WINDOW предотвращает создание консольного окна
+                creationflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+            
+            subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                startupinfo=startupinfo,
+                creationflags=creationflags,
+                close_fds=True
+            )
             
             self.statusBar.showMessage(f"✅ Конфигуратор для {database.name} запущен")
         except Exception as e:
             print(f"ОШИБКА: {e}")
+            import traceback
+            traceback.print_exc()
             self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора: {e}")
 
     def copy_connection_string(self):
