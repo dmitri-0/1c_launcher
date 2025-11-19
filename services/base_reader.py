@@ -25,13 +25,24 @@ class BaseReader:
                     
                     # Пропускаем пустые строки
                     if not line:
-                        # Если накоплена информация о базе, сохраняем её
-                        if current_base and 'ID' in current_base:
-                            bases.append(self._create_database(current_base))
-                            current_base = {}
                         continue
                     
-                    # Парсим параметры
+                    # Если встретили новую секцию [ID=...], сохраняем предыдущую базу
+                    if line.startswith('[') and line.endswith(']'):
+                        # Сохраняем предыдущую базу, если она была
+                        if current_base and 'ID' in current_base:
+                            bases.append(self._create_database(current_base))
+                        
+                        # Начинаем новую базу
+                        current_base = {}
+                        
+                        # Извлекаем ID из строки вида [ID=...]
+                        if '=' in line:
+                            id_value = line[1:-1].split('=', 1)[1]  # Убираем [] и берём значение после =
+                            current_base['ID'] = id_value
+                        continue
+                    
+                    # Парсим остальные параметры
                     if '=' in line:
                         key, value = line.split('=', 1)
                         current_base[key] = value
