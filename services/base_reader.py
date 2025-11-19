@@ -17,6 +17,7 @@ class BaseReader:
         
         bases = []
         current_base = {}
+        current_section_name = None
         
         try:
             with open(self.ibases_path, 'r', encoding=self.encoding) as file:
@@ -27,19 +28,17 @@ class BaseReader:
                     if not line:
                         continue
                     
-                    # Если встретили новую секцию [ID=...], сохраняем предыдущую базу
+                    # Если встретили новую секцию [НАЗВАНИЕ], сохраняем предыдущую базу
                     if line.startswith('[') and line.endswith(']'):
                         # Сохраняем предыдущую базу, если она была
-                        if current_base and 'ID' in current_base:
+                        if current_base and current_section_name:
+                            current_base['SectionName'] = current_section_name
                             bases.append(self._create_database(current_base))
                         
                         # Начинаем новую базу
                         current_base = {}
-                        
-                        # Извлекаем ID из строки вида [ID=...]
-                        if '=' in line:
-                            id_value = line[1:-1].split('=', 1)[1]  # Убираем [] и берём значение после =
-                            current_base['ID'] = id_value
+                        # Извлекаем имя секции из [Название]
+                        current_section_name = line[1:-1].strip()
                         continue
                     
                     # Парсим остальные параметры
@@ -48,8 +47,12 @@ class BaseReader:
                         current_base[key] = value
                 
                 # Добавляем последнюю базу, если есть
-                if current_base and 'ID' in current_base:
+                if current_base and current_section_name:
+                    current_base['SectionName'] = current_section_name
                     bases.append(self._create_database(current_base))
+            
+            # Сортируем по OrderInTree, если оно есть
+            bases.sort(key=lambda x: (x.folder, x.order_in_tree or 0))
                     
         except Exception as e:
             print(f"❌ Ошибка при чтении файла: {e}")
@@ -59,13 +62,23 @@ class BaseReader:
     
     def _create_database(self, data: dict) -> Database1C:
         """Создает объект Database1C из словаря"""
+        # Преобразуем OrderInTree в float
+        order_in_tree = None
+        if 'OrderInTree' in data:
+            try:
+                order_in_tree = float(data['OrderInTree'])
+            except ValueError:
+                pass
+        
         return Database1C(
             id=data.get('ID', ''),
-            name=data.get('Folder', 'Без имени'),
+            name=data.get('SectionName', 'Без имени'),  # Имя из [секции]
             folder=data.get('Folder', ''),
             connect=data.get('Connect', ''),
             app=data.get('App', None),
-            version=data.get('Version', None)
+            version=data.get('Version', None),
+            app_arch=data.get('AppArch', None),  # Разрядность
+            order_in_tree=order_in_tree
         )
     
     def print_bases_list(self, bases: List[Database1C]):
@@ -80,9 +93,8 @@ class BaseReader:
         
         for i, base in enumerate(bases, 1):
             print(f"{i}. {base.name}")
-            print(f"   ID: {base.id}")
+            print(f"   Папка: {base.get_folder_path()}")
             print(f"   Тип: {base.get_connection_type()}")
             print(f"   Подключение: {base.connect}")
-            if base.version:
-                print(f"   Версия: {base.version}")
+            print(f"   Версия: {base.get_full_version()}")
             print()
