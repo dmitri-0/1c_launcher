@@ -22,6 +22,14 @@ class Database1C:
     def __str__(self):
         return self.name
     
+    def is_database(self) -> bool:
+        """
+        Проверяет, является ли запись базой данных.
+        База данных должна иметь непустую строку подключения (Connect).
+        Если Connect пустой или отсутствует - это структурная папка.
+        """
+        return bool(self.connect and self.connect.strip())
+    
     def get_connection_type(self):
         """Определяет тип подключения: File или Srvr"""
         if 'File=' in self.connect:
