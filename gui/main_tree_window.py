@@ -3,7 +3,8 @@
 from PySide6.QtWidgets import (QMainWindow, QTreeView, QVBoxLayout, QWidget, 
                                QStatusBar, QDialog, QVBoxLayout as QVBoxLayoutDialog,
                                QCheckBox, QDialogButtonBox, QLabel, QLineEdit,
-                               QFormLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox)
+                               QFormLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox,
+                               QComboBox)
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QKeySequence, QShortcut
 from PySide6.QtCore import Qt
 from services.base_reader import BaseReader
@@ -15,6 +16,7 @@ import platform
 import re
 import uuid
 from datetime import datetime
+import shutil
 
 
 class HelpDialog(QDialog):
@@ -77,6 +79,10 @@ class HelpDialog(QDialog):
                 <td>Удалить базу (в Недавних - сброс флага, иначе полное удаление)</td>
             </tr>
             <tr>
+                <td><span class="key">Shift+Del</span></td>
+                <td>Очистить кэш выбранной базы (программный и пользовательский)</td>
+            </tr>
+            <tr>
                 <td><span class="key">Shift+F10</span></td>
                 <td>Добавить новую базу (папка заполняется по курсору)</td>
             </tr>
@@ -88,6 +94,7 @@ class HelpDialog(QDialog):
         <br>
         <p><b>Примечание:</b> Для работы горячих клавиш (кроме Esc) необходимо выбрать базу данных в дереве, а не папку.</p>
         <p><b>Копирование базы (Ctrl+D):</b> Создаёт копию выбранной базы с новым ID. К имени исходной базы добавляется текущая дата.</p>
+        <p><b>Очистка кэша (Shift+Del):</b> Удаляет программный кэш из AppData\Local\1C\1cv8\ и пользовательский кэш из AppData\Roaming\1C\1Cv82\</p>
         """)
         layout.addWidget(help_text)
         
@@ -138,10 +145,27 @@ class DatabaseSettingsDialog(QDialog):
         self.password_edit.setText(database.pwd if database and database.pwd else "")
         form_layout.addRow("Пароль:", self.password_edit)
         
-        # Версия
-        self.version_edit = QLineEdit()
-        self.version_edit.setText(database.version if database and database.version else "")
-        form_layout.addRow("Версия:", self.version_edit)
+        # Версия - выпадающий список
+        self.version_combo = QComboBox()
+        self.version_combo.setEditable(True)  # Позволяет вводить свою версию
+        
+        # Получаем список установленных версий
+        installed_versions = self._get_installed_versions()
+        if installed_versions:
+            self.version_combo.addItems(installed_versions)
+        
+        # Устанавливаем текущее значение
+        if database and database.version:
+            # Проверяем, есть ли такая версия в списке
+            index = self.version_combo.findText(database.version)
+            if index >= 0:
+                self.version_combo.setCurrentIndex(index)
+            else:
+                # Если версии нет в списке, добавляем её
+                self.version_combo.addItem(database.version)
+                self.version_combo.setCurrentText(database.version)
+        
+        form_layout.addRow("Версия:", self.version_combo)
         
         # Разрядность
         bitness_layout = QHBoxLayout()
@@ -183,15 +207,50 @@ class DatabaseSettingsDialog(QDialog):
         
         self.setLayout(layout)
     
+    def _get_installed_versions(self):
+        """Получает список установленных версий 1С из системы"""
+        versions = []
+        
+        if platform.system() == 'Windows':
+            # Проверяем оба пути - Program Files и Program Files (x86)
+            base_paths = [
+                Path(r"C:\Program Files\1cv8"),
+                Path(r"C:\Program Files (x86)\1cv8")
+            ]
+            
+            for base_path in base_paths:
+                if base_path.exists():
+                    # Ищем все подпапки с версиями
+                    for item in base_path.iterdir():
+                        if item.is_dir() and item.name != 'common':
+                            # Проверяем наличие bin/1cv8.exe
+                            exe_path = item / 'bin' / '1cv8.exe'
+                            if exe_path.exists():
+                                # Добавляем версию с пометкой разрядности
+                                bitness = "x64" if "Program Files\\1cv8" in str(base_path) and "(x86)" not in str(base_path) else "x86"
+                                version_str = f"{item.name} ({bitness})"
+                                if version_str not in versions:
+                                    versions.append(version_str)
+        
+        # Сортируем версии в обратном порядке (новые первыми)
+        versions.sort(reverse=True)
+        
+        return versions
+    
     def get_settings(self):
         """Возвращает настройки в виде словаря"""
+        # Извлекаем версию из комбобокса
+        version_text = self.version_combo.currentText()
+        # Убираем пометку разрядности, если она есть
+        version = re.sub(r'\s*\([^)]*\)\s*$', '', version_text).strip()
+        
         return {
             'name': self.name_edit.text(),
             'folder': self.folder_edit.text(),
             'connect': self.connect_edit.text(),
             'usr': self.user_edit.text() if self.user_edit.text() else None,
             'pwd': self.password_edit.text() if self.password_edit.text() else None,
-            'version': self.version_edit.text() if self.version_edit.text() else None,
+            'version': version if version else None,
             'app_arch': 'x86_64' if self.bitness_64.isChecked() else 'x86',
             'app': self.app_edit.text() if self.app_edit.text() else None
         }
@@ -267,6 +326,10 @@ class TreeWindow(QMainWindow):
         # Del - удаление базы
         self.shortcut_delete = QShortcut(QKeySequence("Del"), self)
         self.shortcut_delete.activated.connect(self.delete_database)
+        
+        # Shift+Del - очистка кэша
+        self.shortcut_clear_cache = QShortcut(QKeySequence("Shift+Del"), self)
+        self.shortcut_clear_cache.activated.connect(self.clear_cache)
         
         # Shift+F10 - добавление новой базы
         self.shortcut_add = QShortcut(QKeySequence("Shift+F10"), self)
@@ -638,6 +701,68 @@ class TreeWindow(QMainWindow):
                 self.load_bases()
                 
                 self.statusBar.showMessage(f"✅ База '{database.name}' удалена из списка")
+
+    def clear_cache(self):
+        """Очистить кэш базы (Shift+Del)"""
+        database = self.get_selected_database()
+        if not database:
+            return
+        
+        # Подтверждение
+        reply = QMessageBox.question(
+            self,
+            "Очистка кэша",
+            f"Очистить кэш базы '{database.name}'?\n\nБудет удален:\n- Программный кэш (AppData\\Local\\1C\\1cv8\\{database.id})\n- Пользовательский кэш (AppData\\Roaming\\1C\\1Cv82\\{database.id})",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        try:
+            # Получаем путь к AppData
+            appdata_local = Path(os.environ.get('LOCALAPPDATA', ''))
+            appdata_roaming = Path(os.environ.get('APPDATA', ''))
+            
+            deleted_items = []
+            
+            # Очищаем программный кэш (AppData\Local\1C\1cv8\{database_id})
+            program_cache_path = appdata_local / '1C' / '1cv8' / database.id
+            if program_cache_path.exists():
+                try:
+                    shutil.rmtree(program_cache_path)
+                    deleted_items.append(f"Программный кэш: {program_cache_path}")
+                except Exception as e:
+                    deleted_items.append(f"⚠️ Ошибка удаления программного кэша: {e}")
+            else:
+                deleted_items.append("ℹ️ Программный кэш не найден")
+            
+            # Очищаем пользовательский кэш (AppData\Roaming\1C\1Cv82\{database_id})
+            user_cache_path = appdata_roaming / '1C' / '1Cv82' / database.id
+            if user_cache_path.exists():
+                try:
+                    shutil.rmtree(user_cache_path)
+                    deleted_items.append(f"Пользовательский кэш: {user_cache_path}")
+                except Exception as e:
+                    deleted_items.append(f"⚠️ Ошибка удаления пользовательского кэша: {e}")
+            else:
+                deleted_items.append("ℹ️ Пользовательский кэш не найден")
+            
+            # Показываем результат
+            result_message = "\n".join(deleted_items)
+            QMessageBox.information(
+                self,
+                "Результат очистки кэша",
+                result_message
+            )
+            
+            self.statusBar.showMessage(f"✅ Кэш базы '{database.name}' очищен")
+            
+        except Exception as e:
+            self.statusBar.showMessage(f"❌ Ошибка очистки кэша: {e}")
+            import traceback
+            traceback.print_exc()
 
     def add_database(self):
         """Добавить новую базу (Shift+F10)"""
