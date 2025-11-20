@@ -3,7 +3,7 @@
 from PySide6.QtWidgets import (QMainWindow, QTreeView, QVBoxLayout, QWidget, 
                                QStatusBar, QDialog, QVBoxLayout as QVBoxLayoutDialog,
                                QCheckBox, QDialogButtonBox, QLabel, QLineEdit,
-                               QFormLayout, QHBoxLayout, QTextEdit, QPushButton)
+                               QFormLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox)
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QKeySequence, QShortcut
 from PySide6.QtCore import Qt
 from services.base_reader import BaseReader
@@ -73,6 +73,14 @@ class HelpDialog(QDialog):
                 <td>Редактировать настройки выбранной базы</td>
             </tr>
             <tr>
+                <td><span class="key">Del</span></td>
+                <td>Удалить базу (в Недавних - сброс флага, иначе полное удаление)</td>
+            </tr>
+            <tr>
+                <td><span class="key">Shift+F10</span></td>
+                <td>Добавить новую базу (папка заполняется по курсору)</td>
+            </tr>
+            <tr>
                 <td><span class="key">Esc</span></td>
                 <td>Выход из программы</td>
             </tr>
@@ -96,15 +104,17 @@ class DatabaseSettingsDialog(QDialog):
     def __init__(self, parent=None, database=None):
         super().__init__(parent)
         self.database = database
-        self.setWindowTitle(f"Настройки базы: {database.name if database else ''}")
+        self.setWindowTitle(f"Настройки базы: {database.name if database else 'Новая база'}")
         self.setMinimumWidth(600)
         
         layout = QVBoxLayout()
         form_layout = QFormLayout()
         
-        # Название базы (только для отображения)
-        self.name_label = QLabel(database.name if database else "")
-        form_layout.addRow("Название:", self.name_label)
+        # Название базы (теперь можно редактировать)
+        self.name_edit = QLineEdit()
+        self.name_edit.setText(database.name if database else "")
+        self.name_edit.setPlaceholderText("Введите название базы")
+        form_layout.addRow("Название:", self.name_edit)
         
         # Папка
         self.folder_edit = QLineEdit()
@@ -176,6 +186,7 @@ class DatabaseSettingsDialog(QDialog):
     def get_settings(self):
         """Возвращает настройки в виде словаря"""
         return {
+            'name': self.name_edit.text(),
             'folder': self.folder_edit.text(),
             'connect': self.connect_edit.text(),
             'usr': self.user_edit.text() if self.user_edit.text() else None,
@@ -253,6 +264,14 @@ class TreeWindow(QMainWindow):
         self.shortcut_settings = QShortcut(QKeySequence("Ctrl+E"), self)
         self.shortcut_settings.activated.connect(self.edit_database_settings)
         
+        # Del - удаление базы
+        self.shortcut_delete = QShortcut(QKeySequence("Del"), self)
+        self.shortcut_delete.activated.connect(self.delete_database)
+        
+        # Shift+F10 - добавление новой базы
+        self.shortcut_add = QShortcut(QKeySequence("Shift+F10"), self)
+        self.shortcut_add.activated.connect(self.add_database)
+        
         # Esc - выход из программы
         self.shortcut_esc = QShortcut(QKeySequence("Esc"), self)
         self.shortcut_esc.activated.connect(self.close)
@@ -283,6 +302,32 @@ class TreeWindow(QMainWindow):
         
         key = (parent_row, row)
         return self.bases_dict.get(key)
+
+    def get_current_folder(self):
+        """Получить папку, на которой стоит курсор (для новой базы)"""
+        indexes = self.tree.selectedIndexes()
+        if not indexes:
+            return "/"
+        
+        index = indexes[0]
+        
+        # Если это папка (родительский элемент)
+        if not index.parent().isValid():
+            folder_item = self.model.item(index.row(), 0)
+            if folder_item:
+                folder_text = folder_item.text()
+                # Пропускаем "Недавние"
+                if "Недавние" in folder_text:
+                    return "/"
+                # Возвращаем папку с начальным слэшем
+                return f"/{folder_text}" if not folder_text.startswith("/") else folder_text
+        else:
+            # Если это база, берем её папку
+            database = self.get_selected_database()
+            if database and not database.is_recent:
+                return database.folder
+        
+        return "/"
 
     def _parse_server_connect_string(self, connect_string):
         """
@@ -522,7 +567,8 @@ class TreeWindow(QMainWindow):
         if dialog.exec() == QDialog.Accepted:
             settings = dialog.get_settings()
             
-            # Обновляем настройки базы
+            # Обновляем настройки базы (включая имя)
+            database.name = settings['name']
             database.folder = settings['folder']
             database.connect = settings['connect']
             database.usr = settings['usr']
@@ -538,6 +584,110 @@ class TreeWindow(QMainWindow):
             self.load_bases()
             
             self.statusBar.showMessage(f"✅ Настройки базы {database.name} сохранены")
+
+    def delete_database(self):
+        """Удалить базу (Del)"""
+        database = self.get_selected_database()
+        if not database:
+            return
+        
+        # Если база в "Недавних", сбрасываем флаг IsRecent
+        if database.is_recent:
+            # Подтверждение
+            reply = QMessageBox.question(
+                self,
+                "Удаление из недавних",
+                f"Убрать базу '{database.name}' из недавних?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # Сбрасываем флаг и восстанавливаем оригинальную папку
+                database.is_recent = False
+                if database.original_folder:
+                    database.folder = database.original_folder
+                    database.original_folder = None
+                database.last_run_time = None
+                
+                # Сохраняем изменения
+                self.save_bases()
+                
+                # Перезагружаем дерево
+                self.load_bases()
+                
+                self.statusBar.showMessage(f"✅ База '{database.name}' убрана из недавних")
+        else:
+            # Полное удаление базы
+            reply = QMessageBox.question(
+                self,
+                "Удаление базы",
+                f"Удалить базу '{database.name}' из списка?\n\nВнимание: это не удалит файлы базы данных!",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # Удаляем базу из списка
+                self.all_bases.remove(database)
+                
+                # Сохраняем изменения
+                self.save_bases()
+                
+                # Перезагружаем дерево
+                self.load_bases()
+                
+                self.statusBar.showMessage(f"✅ База '{database.name}' удалена из списка")
+
+    def add_database(self):
+        """Добавить новую базу (Shift+F10)"""
+        # Создаем новую базу с заполнением папки по курсору
+        from models.database import Database1C
+        
+        current_folder = self.get_current_folder()
+        
+        new_database = Database1C(
+            id=str(uuid.uuid4()),
+            name="Новая база",
+            folder=current_folder,
+            connect="",
+            app=None,
+            version=None,
+            app_arch='x86',
+            order_in_tree=None,
+            usr=None,
+            pwd=None,
+            original_folder=None,
+            is_recent=False,
+            last_run_time=None
+        )
+        
+        # Открываем диалог настроек для новой базы
+        dialog = DatabaseSettingsDialog(self, new_database)
+        
+        if dialog.exec() == QDialog.Accepted:
+            settings = dialog.get_settings()
+            
+            # Обновляем настройки новой базы
+            new_database.name = settings['name']
+            new_database.folder = settings['folder']
+            new_database.connect = settings['connect']
+            new_database.usr = settings['usr']
+            new_database.pwd = settings['pwd']
+            new_database.version = settings['version']
+            new_database.app_arch = settings['app_arch']
+            new_database.app = settings['app']
+            
+            # Добавляем базу в конец списка
+            self.all_bases.append(new_database)
+            
+            # Сохраняем изменения
+            self.save_bases()
+            
+            # Перезагружаем дерево
+            self.load_bases()
+            
+            self.statusBar.showMessage(f"✅ База '{new_database.name}' добавлена")
 
     def _get_1c_executable(self, database):
         """Определяет путь к исполняемому файлу 1C с учетом разрядности"""
