@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 import platform
 import re
+import uuid
+from datetime import datetime
 
 
 class HelpDialog(QDialog):
@@ -63,6 +65,10 @@ class HelpDialog(QDialog):
                 <td>Скопировать строку подключения в буфер обмена</td>
             </tr>
             <tr>
+                <td><span class="key">Ctrl+D</span></td>
+                <td>Копировать выбранную базу (создать дубликат)</td>
+            </tr>
+            <tr>
                 <td><span class="key">Ctrl+E</span></td>
                 <td>Редактировать настройки выбранной базы</td>
             </tr>
@@ -73,6 +79,7 @@ class HelpDialog(QDialog):
         </table>
         <br>
         <p><b>Примечание:</b> Для работы горячих клавиш (кроме Esc) необходимо выбрать базу данных в дереве, а не папку.</p>
+        <p><b>Копирование базы (Ctrl+D):</b> Создаёт копию выбранной базы с новым ID. К имени исходной базы добавляется текущая дата.</p>
         """)
         layout.addWidget(help_text)
         
@@ -98,6 +105,12 @@ class DatabaseSettingsDialog(QDialog):
         # Название базы (только для отображения)
         self.name_label = QLabel(database.name if database else "")
         form_layout.addRow("Название:", self.name_label)
+        
+        # Папка
+        self.folder_edit = QLineEdit()
+        self.folder_edit.setText(database.folder if database else "")
+        self.folder_edit.setPlaceholderText("Например: /Тестовые")
+        form_layout.addRow("Папка:", self.folder_edit)
         
         # Строка подключения
         self.connect_edit = QLineEdit()
@@ -163,6 +176,7 @@ class DatabaseSettingsDialog(QDialog):
     def get_settings(self):
         """Возвращает настройки в виде словаря"""
         return {
+            'folder': self.folder_edit.text(),
             'connect': self.connect_edit.text(),
             'usr': self.user_edit.text() if self.user_edit.text() else None,
             'pwd': self.password_edit.text() if self.password_edit.text() else None,
@@ -230,6 +244,10 @@ class TreeWindow(QMainWindow):
         # Ctrl+C - копирование строки подключения
         self.shortcut_copy = QShortcut(QKeySequence("Ctrl+C"), self)
         self.shortcut_copy.activated.connect(self.copy_connection_string)
+        
+        # Ctrl+D - копирование базы
+        self.shortcut_duplicate = QShortcut(QKeySequence("Ctrl+D"), self)
+        self.shortcut_duplicate.activated.connect(self.duplicate_database)
         
         # Ctrl+E - настройки базы
         self.shortcut_settings = QShortcut(QKeySequence("Ctrl+E"), self)
@@ -374,6 +392,9 @@ class TreeWindow(QMainWindow):
         # Помечаем базу как недавнюю
         database.is_recent = True
         
+        # Устанавливаем время последнего запуска
+        database.last_run_time = datetime.now()
+        
         # Удаляем базу из текущей позиции в списке
         if database in self.all_bases:
             self.all_bases.remove(database)
@@ -443,6 +464,53 @@ class TreeWindow(QMainWindow):
         except Exception as e:
             self.statusBar.showMessage(f"❌ Ошибка копирования: {e}")
 
+    def duplicate_database(self):
+        """Копировать базу (Ctrl+D)"""
+        database = self.get_selected_database()
+        if not database:
+            return
+        
+        try:
+            # Создаем копию базы с новым ID
+            from models.database import Database1C
+            
+            new_database = Database1C(
+                id=str(uuid.uuid4()),  # Новый UUID
+                name=database.name,  # Сохраняем имя
+                folder=database.folder,
+                connect=database.connect,
+                app=database.app,
+                version=database.version,
+                app_arch=database.app_arch,
+                order_in_tree=database.order_in_tree,
+                usr=database.usr,
+                pwd=database.pwd,
+                original_folder=database.original_folder,
+                is_recent=database.is_recent,
+                last_run_time=None  # Сбрасываем время запуска для копии
+            )
+            
+            # Добавляем текущую дату к имени исходной базы
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            database.name = f"{database.name} {current_date}"
+            
+            # Добавляем новую базу в список после исходной
+            index = self.all_bases.index(database)
+            self.all_bases.insert(index + 1, new_database)
+            
+            # Сохраняем изменения
+            self.save_bases()
+            
+            # Перезагружаем дерево
+            self.load_bases()
+            
+            self.statusBar.showMessage(f"✅ База скопирована. Исходная база переименована в '{database.name}'")
+            
+        except Exception as e:
+            self.statusBar.showMessage(f"❌ Ошибка копирования базы: {e}")
+            import traceback
+            traceback.print_exc()
+
     def edit_database_settings(self):
         """Редактировать настройки базы (Ctrl+E)"""
         database = self.get_selected_database()
@@ -455,6 +523,7 @@ class TreeWindow(QMainWindow):
             settings = dialog.get_settings()
             
             # Обновляем настройки базы
+            database.folder = settings['folder']
             database.connect = settings['connect']
             database.usr = settings['usr']
             database.pwd = settings['pwd']
@@ -519,11 +588,13 @@ class TreeWindow(QMainWindow):
                     f.write(f"Connect={base.connect}\n")
                     f.write(f"Folder={base.folder}\n")
                     
-                    # Добавляем теги IsRecent и OriginalFolder
+                    # Добавляем тег IsRecent (OriginalFolder НЕ сохраняем в файл)
                     if base.is_recent:
                         f.write(f"IsRecent=1\n")
-                    if base.original_folder:
-                        f.write(f"OriginalFolder={base.original_folder}\n")
+                    
+                    # Сохраняем LastRunTime в формате ISO 8601
+                    if base.last_run_time:
+                        f.write(f"LastRunTime={base.last_run_time.isoformat()}\n")
                     
                     if base.app:
                         f.write(f"App={base.app}\n")
