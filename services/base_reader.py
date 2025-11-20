@@ -51,8 +51,8 @@ class BaseReader:
                     current_base['SectionName'] = current_section_name
                     bases.append(self._create_database(current_base))
             
-            # Сортируем по OrderInTree, если оно есть
-            bases.sort(key=lambda x: (x.folder, x.order_in_tree or 0))
+            # Сортируем: сначала недавние, потом по папкам и OrderInTree
+            bases.sort(key=lambda x: (not x.is_recent, x.folder, x.order_in_tree or 0))
                     
         except Exception as e:
             print(f"❌ Ошибка при чтении файла: {e}")
@@ -70,6 +70,12 @@ class BaseReader:
             except ValueError:
                 pass
         
+        # Парсим IsRecent (1 или true = True, остальное = False)
+        is_recent = False
+        if 'IsRecent' in data:
+            is_recent_value = data['IsRecent'].strip().lower()
+            is_recent = is_recent_value in ['1', 'true', 'yes']
+        
         return Database1C(
             id=data.get('ID', ''),
             name=data.get('SectionName', 'Без имени'),  # Имя из [секции]
@@ -80,7 +86,9 @@ class BaseReader:
             app_arch=data.get('AppArch', None),  # Разрядность
             order_in_tree=order_in_tree,
             usr=data.get('Usr', None),  # Пользователь
-            pwd=data.get('Pwd', None)   # Пароль
+            pwd=data.get('Pwd', None),  # Пароль
+            original_folder=data.get('OriginalFolder', None),  # Оригинальная папка
+            is_recent=is_recent  # Флаг недавних
         )
     
     def print_bases_list(self, bases: List[Database1C]):
