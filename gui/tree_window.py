@@ -155,10 +155,21 @@ class TreeWindow(QMainWindow):
                 parsed_connect = self._parse_server_connect_string(database.connect)
                 params.append(f'/S"{parsed_connect}"')
             
-            if database.usr:
-                params.append(f'/N"{database.usr}"')
-            if database.pwd:
-                params.append(f'/P"{database.pwd}"')
+            # Используем учетные данные в зависимости от режима
+            usr = None
+            pwd = None
+            
+            if mode == 'ENTERPRISE':
+                usr = database.usr_enterprise or database.usr  # Фолбэк на старое поле
+                pwd = database.pwd_enterprise or database.pwd
+            elif mode == 'DESIGNER':
+                usr = database.usr_configurator or database.usr  # Фолбэк на старое поле
+                pwd = database.pwd_configurator or database.pwd
+            
+            if usr:
+                params.append(f'/N"{usr}"')
+            if pwd:
+                params.append(f'/P"{pwd}"')
             
             cmd_line = f'"{executable}" ' + ' '.join(f'"{p}"' if ' ' in p and not p.startswith('/') else p for p in params)
             
@@ -326,7 +337,15 @@ class TreeWindow(QMainWindow):
                 pwd=database.pwd,
                 original_folder=database.original_folder,
                 is_recent=database.is_recent,
-                last_run_time=None
+                last_run_time=None,
+                # Копируем новые поля
+                usr_enterprise=database.usr_enterprise,
+                pwd_enterprise=database.pwd_enterprise,
+                usr_configurator=database.usr_configurator,
+                pwd_configurator=database.pwd_configurator,
+                usr_storage=database.usr_storage,
+                pwd_storage=database.pwd_storage,
+                storage_path=database.storage_path,
             )
             
             current_date = datetime.now().strftime("%Y-%m-%d")
@@ -359,11 +378,19 @@ class TreeWindow(QMainWindow):
             database.name = settings['name']
             database.folder = settings['folder']
             database.connect = settings['connect']
-            database.usr = settings['usr']
-            database.pwd = settings['pwd']
+            database.usr = settings.get('usr')  # Старое поле (для обратной совместимости)
+            database.pwd = settings.get('pwd')
             database.version = settings['version']
             database.app_arch = settings['app_arch']
             database.app = settings['app']
+            database.storage_path = settings['storage_path']
+            # Новые поля
+            database.usr_enterprise = settings['usr_enterprise']
+            database.pwd_enterprise = settings['pwd_enterprise']
+            database.usr_configurator = settings['usr_configurator']
+            database.pwd_configurator = settings['pwd_configurator']
+            database.usr_storage = settings['usr_storage']
+            database.pwd_storage = settings['pwd_storage']
             
             self.save_bases()
             self.load_bases()
@@ -467,7 +494,15 @@ class TreeWindow(QMainWindow):
             pwd=None,
             original_folder=None,
             is_recent=False,
-            last_run_time=None
+            last_run_time=None,
+            # Новые поля
+            usr_enterprise=None,
+            pwd_enterprise=None,
+            usr_configurator=None,
+            pwd_configurator=None,
+            usr_storage=None,
+            pwd_storage=None,
+            storage_path=None,
         )
         
         dialog = DatabaseSettingsDialog(self, new_database)
@@ -478,11 +513,19 @@ class TreeWindow(QMainWindow):
             new_database.name = settings['name']
             new_database.folder = settings['folder']
             new_database.connect = settings['connect']
-            new_database.usr = settings['usr']
-            new_database.pwd = settings['pwd']
+            new_database.usr = settings.get('usr')
+            new_database.pwd = settings.get('pwd')
             new_database.version = settings['version']
             new_database.app_arch = settings['app_arch']
             new_database.app = settings['app']
+            new_database.storage_path = settings['storage_path']
+            # Новые поля
+            new_database.usr_enterprise = settings['usr_enterprise']
+            new_database.pwd_enterprise = settings['pwd_enterprise']
+            new_database.usr_configurator = settings['usr_configurator']
+            new_database.pwd_configurator = settings['pwd_configurator']
+            new_database.usr_storage = settings['usr_storage']
+            new_database.pwd_storage = settings['pwd_storage']
             
             self.all_bases.append(new_database)
             
@@ -546,10 +589,28 @@ class TreeWindow(QMainWindow):
                         f.write(f"AppArch={base.app_arch}\n")
                     if base.order_in_tree is not None:
                         f.write(f"OrderInTree={base.order_in_tree}\n")
+                    
+                    # Старые поля (для обратной совместимости)
                     if base.usr:
                         f.write(f"Usr={base.usr}\n")
                     if base.pwd:
                         f.write(f"Pwd={base.pwd}\n")
+                    
+                    # Новые поля для таблицы учетных данных
+                    if base.storage_path:
+                        f.write(f"StoragePath={base.storage_path}\n")
+                    if base.usr_enterprise:
+                        f.write(f"UsrEnterprise={base.usr_enterprise}\n")
+                    if base.pwd_enterprise:
+                        f.write(f"PwdEnterprise={base.pwd_enterprise}\n")
+                    if base.usr_configurator:
+                        f.write(f"UsrConfigurator={base.usr_configurator}\n")
+                    if base.pwd_configurator:
+                        f.write(f"PwdConfigurator={base.pwd_configurator}\n")
+                    if base.usr_storage:
+                        f.write(f"UsrStorage={base.usr_storage}\n")
+                    if base.pwd_storage:
+                        f.write(f"PwdStorage={base.pwd_storage}\n")
                     
                     f.write("\n")
             
