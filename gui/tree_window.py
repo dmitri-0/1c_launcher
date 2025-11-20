@@ -23,7 +23,7 @@ import tempfile
 class TreeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Дерево баз 1С")
+        self.setWindowTitle("Базы 1С")
         self.resize(1100, 600)
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
