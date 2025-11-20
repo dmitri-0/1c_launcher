@@ -1,4 +1,4 @@
-# dialogs/help_dialog.py
+"""Диалог справки по горячим клавишам"""
 
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QPushButton
 from PySide6.QtCore import Qt

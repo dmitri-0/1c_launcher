@@ -1,12 +1,13 @@
-# dialogs/database_settings_dialog.py
+"""Диалог настроек базы данных"""
 
+import re
+import platform
+from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit,
-    QDialogButtonBox, QComboBox
+    QDialogButtonBox, QComboBox, QTableWidget, QTableWidgetItem,
+    QHeaderView, QLabel
 )
-from pathlib import Path
-import platform
-import re
 
 
 class DatabaseSettingsDialog(QDialog):
@@ -15,7 +16,7 @@ class DatabaseSettingsDialog(QDialog):
         super().__init__(parent)
         self.database = database
         self.setWindowTitle(f"Настройки базы: {database.name if database else 'Новая база'}")
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(700)
         
         layout = QVBoxLayout()
         form_layout = QFormLayout()
@@ -37,16 +38,13 @@ class DatabaseSettingsDialog(QDialog):
         self.connect_edit.setText(database.connect if database else "")
         form_layout.addRow("Строка подключения:", self.connect_edit)
         
-        # Пользователь
-        self.user_edit = QLineEdit()
-        self.user_edit.setText(database.usr if database and database.usr else "")
-        form_layout.addRow("Пользователь:", self.user_edit)
-        
-        # Пароль
-        self.password_edit = QLineEdit()
-        self.password_edit.setEchoMode(QLineEdit.Password)
-        self.password_edit.setText(database.pwd if database and database.pwd else "")
-        form_layout.addRow("Пароль:", self.password_edit)
+        # Путь к хранилищу
+        self.storage_path_edit = QLineEdit()
+        self.storage_path_edit.setText(
+            database.storage_path if database and database.storage_path else ""
+        )
+        self.storage_path_edit.setPlaceholderText("tcp://server/repo")
+        form_layout.addRow("Путь к хранилищу:", self.storage_path_edit)
         
         # Версия - выпадающий список с разрядностью
         self.version_combo = QComboBox()
@@ -81,6 +79,58 @@ class DatabaseSettingsDialog(QDialog):
         form_layout.addRow("Путь к 1cv8.exe:", self.app_edit)
         
         layout.addLayout(form_layout)
+        
+        # Таблица учетных данных
+        credentials_label = QLabel("Учетные данные:")
+        layout.addWidget(credentials_label)
+        
+        self.credentials_table = QTableWidget(2, 3)  # 2 строки, 3 колонки
+        self.credentials_table.setHorizontalHeaderLabels([
+            "Предприятие", "Конфигуратор", "Хранилище"
+        ])
+        self.credentials_table.setVerticalHeaderLabels([
+            "Пользователь", "Пароль"
+        ])
+        
+        # Настраиваем растягивание колонок
+        header = self.credentials_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        
+        # Устанавливаем высоту таблицы
+        self.credentials_table.setMaximumHeight(120)
+        
+        # Заполняем таблицу существующими данными
+        if database:
+            # Предприятие
+            self.credentials_table.setItem(0, 0, QTableWidgetItem(
+                database.usr_enterprise or ""
+            ))
+            self.credentials_table.setItem(1, 0, QTableWidgetItem(
+                database.pwd_enterprise or ""
+            ))
+            
+            # Конфигуратор
+            self.credentials_table.setItem(0, 1, QTableWidgetItem(
+                database.usr_configurator or ""
+            ))
+            self.credentials_table.setItem(1, 1, QTableWidgetItem(
+                database.pwd_configurator or ""
+            ))
+            
+            # Хранилище
+            self.credentials_table.setItem(0, 2, QTableWidgetItem(
+                database.usr_storage or ""
+            ))
+            self.credentials_table.setItem(1, 2, QTableWidgetItem(
+                database.pwd_storage or ""
+            ))
+        else:
+            # Инициализируем пустые ячейки для новой базы
+            for row in range(2):
+                for col in range(3):
+                    self.credentials_table.setItem(row, col, QTableWidgetItem(""))
+        
+        layout.addWidget(self.credentials_table)
         
         # Кнопки
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -141,9 +191,15 @@ class DatabaseSettingsDialog(QDialog):
             'name': self.name_edit.text(),
             'folder': self.folder_edit.text(),
             'connect': self.connect_edit.text(),
-            'usr': self.user_edit.text() if self.user_edit.text() else None,
-            'pwd': self.password_edit.text() if self.password_edit.text() else None,
             'version': version if version else None,
             'app_arch': app_arch,
-            'app': self.app_edit.text() if self.app_edit.text() else None
+            'app': self.app_edit.text() if self.app_edit.text() else None,
+            'storage_path': self.storage_path_edit.text() if self.storage_path_edit.text() else None,
+            # Данные из таблицы
+            'usr_enterprise': self.credentials_table.item(0, 0).text() or None,
+            'pwd_enterprise': self.credentials_table.item(1, 0).text() or None,
+            'usr_configurator': self.credentials_table.item(0, 1).text() or None,
+            'pwd_configurator': self.credentials_table.item(1, 1).text() or None,
+            'usr_storage': self.credentials_table.item(0, 2).text() or None,
+            'pwd_storage': self.credentials_table.item(1, 2).text() or None,
         }
