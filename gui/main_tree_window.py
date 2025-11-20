@@ -107,12 +107,13 @@ class TreeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Дерево баз 1С")
-        self.resize(900, 600)
+        self.resize(1100, 600)  # Увеличена ширина с 900 до 1100
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
         
         self.bases_dict = {}  # Словарь для быстрого поиска баз по индексу
         self.all_bases = []   # Список всех баз в памяти
+        self.last_launched_db = None  # Последняя запущенная база
 
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels([
@@ -139,6 +140,9 @@ class TreeWindow(QMainWindow):
         self.setup_shortcuts()
         
         self.load_bases()
+        
+        # Раскрываем папку "Недавние" и устанавливаем курсор на последнюю запущенную базу
+        self.expand_recent_and_select_last()
 
     def setup_shortcuts(self):
         """Настройка горячих клавиш"""
@@ -249,11 +253,6 @@ class TreeWindow(QMainWindow):
             # Выводим строку запуска в статус бар
             self.statusBar.showMessage(f"Запуск: {cmd_line}")
             
-            print("\n" + "="*80)
-            print(f"КОМАНДА ЗАПУСКА 1С ({mode}):")
-            print(cmd_line)
-            print("="*80 + "\n")
-            
             # Создаем временный BAT-файл и запускаем через него
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False, encoding='cp866') as bat_file:
@@ -284,6 +283,24 @@ class TreeWindow(QMainWindow):
         except:
             pass
 
+    def _move_to_recent(self, database):
+        """Перемещает базу в папку 'Недавние' в начало списка"""
+        # Изменяем папку базы на "Недавние"
+        database.folder = "/Недавние"
+        
+        # Удаляем базу из текущей позиции в списке
+        if database in self.all_bases:
+            self.all_bases.remove(database)
+        
+        # Вставляем базу в начало списка
+        self.all_bases.insert(0, database)
+        
+        # Сохраняем изменения в файл
+        self.save_bases()
+        
+        # Запоминаем последнюю запущенную базу
+        self.last_launched_db = database
+
     def open_database(self):
         """Открыть базу (F3)"""
         database = self.get_selected_database()
@@ -296,8 +313,12 @@ class TreeWindow(QMainWindow):
             return
         
         if self._launch_1c_process(executable, "ENTERPRISE", database):
-            # Сообщение о запуске уже выведено в _launch_1c_process
-            pass
+            # Перемещаем базу в "Недавние"
+            self._move_to_recent(database)
+            # Перезагружаем дерево
+            self.load_bases()
+            # Раскрываем "Недавние" и выделяем базу
+            self.expand_recent_and_select_last()
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске базы {database.name}")
 
@@ -313,8 +334,12 @@ class TreeWindow(QMainWindow):
             return
         
         if self._launch_1c_process(executable, "DESIGNER", database):
-            # Сообщение о запуске уже выведено в _launch_1c_process
-            pass
+            # Перемещаем базу в "Недавние"
+            self._move_to_recent(database)
+            # Перезагружаем дерево
+            self.load_bases()
+            # Раскрываем "Недавние" и выделяем базу
+            self.expand_recent_and_select_last()
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
 
@@ -464,3 +489,32 @@ class TreeWindow(QMainWindow):
                 folder_item.appendRow(row)
 
         self.statusBar.showMessage(f"Найдено баз: {sum(len(v) for v in folders.values())}")
+
+    def expand_recent_and_select_last(self):
+        """Раскрывает папку 'Недавние' и устанавливает курсор на последнюю запущенную базу"""
+        # Ищем папку "Недавние"
+        for folder_idx in range(self.model.rowCount()):
+            folder_item = self.model.item(folder_idx, 0)
+            if folder_item and "Недавние" in folder_item.text():
+                # Раскрываем папку
+                folder_index = self.model.index(folder_idx, 0)
+                self.tree.expand(folder_index)
+                
+                # Если есть последняя запущенная база, выделяем её
+                if self.last_launched_db:
+                    # Ищем базу в папке "Недавние"
+                    for db_idx in range(folder_item.rowCount()):
+                        db_item = folder_item.child(db_idx, 0)
+                        if db_item and db_item.text() == self.last_launched_db.name:
+                            # Выделяем базу
+                            db_index = self.model.index(db_idx, 0, folder_index)
+                            self.tree.setCurrentIndex(db_index)
+                            self.tree.scrollTo(db_index)
+                            break
+                else:
+                    # Если нет последней запущенной базы, выделяем первую в "Недавние"
+                    if folder_item.rowCount() > 0:
+                        first_db_index = self.model.index(0, 0, folder_index)
+                        self.tree.setCurrentIndex(first_db_index)
+                        self.tree.scrollTo(first_db_index)
+                break
