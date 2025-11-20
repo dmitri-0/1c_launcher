@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import List
 from models.database import Database1C
+from datetime import datetime
 
 class BaseReader:
     """Сервис для чтения списка баз из ibases.v8i"""
@@ -51,8 +52,13 @@ class BaseReader:
                     current_base['SectionName'] = current_section_name
                     bases.append(self._create_database(current_base))
             
-            # Сортируем: сначала недавние, потом по папкам и OrderInTree
-            bases.sort(key=lambda x: (not x.is_recent, x.folder, x.order_in_tree or 0))
+            # Сортируем: сначала недавние (по времени запуска, самые свежие первыми), потом по папкам и OrderInTree
+            bases.sort(key=lambda x: (
+                not x.is_recent,  # Недавние в начало
+                -(x.last_run_time.timestamp() if x.last_run_time else 0),  # Свежие запуски первыми (обратная сортировка)
+                x.folder,  # Потом по папкам
+                x.order_in_tree or 0  # И по OrderInTree
+            ))
                     
         except Exception as e:
             print(f"❌ Ошибка при чтении файла: {e}")
@@ -76,6 +82,15 @@ class BaseReader:
             is_recent_value = data['IsRecent'].strip().lower()
             is_recent = is_recent_value in ['1', 'true', 'yes']
         
+        # Парсим LastRunTime
+        last_run_time = None
+        if 'LastRunTime' in data:
+            try:
+                # Формат: ISO 8601 (например, "2025-11-20T08:30:15")
+                last_run_time = datetime.fromisoformat(data['LastRunTime'])
+            except ValueError:
+                pass
+        
         return Database1C(
             id=data.get('ID', ''),
             name=data.get('SectionName', 'Без имени'),  # Имя из [секции]
@@ -87,8 +102,9 @@ class BaseReader:
             order_in_tree=order_in_tree,
             usr=data.get('Usr', None),  # Пользователь
             pwd=data.get('Pwd', None),  # Пароль
-            original_folder=data.get('OriginalFolder', None),  # Оригинальная папка
-            is_recent=is_recent  # Флаг недавних
+            original_folder=data.get('OriginalFolder', None),  # Оригинальная папка (читаем, но не сохраняем)
+            is_recent=is_recent,  # Флаг недавних
+            last_run_time=last_run_time  # Время последнего запуска
         )
     
     def print_bases_list(self, bases: List[Database1C]):
