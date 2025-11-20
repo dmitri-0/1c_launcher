@@ -14,6 +14,8 @@ class Database1C:
     order_in_tree: Optional[float] = None  # Порядок в дереве
     usr: Optional[str] = None  # Имя пользователя
     pwd: Optional[str] = None  # Пароль
+    original_folder: Optional[str] = None  # Оригинальная папка (сохраняется при добавлении в "Недавние")
+    is_recent: bool = False  # Флаг принадлежности к "Недавним"
     
     def __str__(self):
         return self.name
@@ -44,3 +46,10 @@ class Database1C:
         if folder.startswith('/'):
             folder = folder[1:]
         return folder if folder else 'Без папки'
+    
+    def get_display_folder(self) -> str:
+        """Возвращает папку для отображения в дереве"""
+        # Если база помечена как недавняя, показываем "Недавние"
+        if self.is_recent:
+            return "Недавние"
+        return self.get_folder_path()
