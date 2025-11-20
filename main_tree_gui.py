@@ -1,6 +1,6 @@
 ﻿import sys
 from PySide6.QtWidgets import QApplication
-from gui.main_tree_window import TreeWindow
+from gui.tree_window import TreeWindow
 
 def main():
     app = QApplication(sys.argv)
