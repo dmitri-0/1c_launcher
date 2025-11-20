@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QMainWindow, QTreeView, QVBoxLayout, QWidget,
                                QFormLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox,
                                QComboBox)
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QKeySequence, QShortcut
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from services.base_reader import BaseReader
 from config import IBASES_PATH, ENCODING
 import subprocess
@@ -145,7 +145,7 @@ class DatabaseSettingsDialog(QDialog):
         self.password_edit.setText(database.pwd if database and database.pwd else "")
         form_layout.addRow("Пароль:", self.password_edit)
         
-        # Версия - выпадающий список
+        # Версия - выпадающий список с разрядностью
         self.version_combo = QComboBox()
         self.version_combo.setEditable(True)  # Позволяет вводить свою версию
         
@@ -156,40 +156,20 @@ class DatabaseSettingsDialog(QDialog):
         
         # Устанавливаем текущее значение
         if database and database.version:
+            # Формируем строку версии с разрядностью
+            arch_display = 'x64' if database.app_arch == 'x86_64' else 'x86'
+            version_with_arch = f"{database.version} ({arch_display})"
+            
             # Проверяем, есть ли такая версия в списке
-            index = self.version_combo.findText(database.version)
+            index = self.version_combo.findText(version_with_arch)
             if index >= 0:
                 self.version_combo.setCurrentIndex(index)
             else:
                 # Если версии нет в списке, добавляем её
-                self.version_combo.addItem(database.version)
-                self.version_combo.setCurrentText(database.version)
+                self.version_combo.addItem(version_with_arch)
+                self.version_combo.setCurrentText(version_with_arch)
         
         form_layout.addRow("Версия:", self.version_combo)
-        
-        # Разрядность
-        bitness_layout = QHBoxLayout()
-        self.bitness_32 = QCheckBox("32-бит (x86)")
-        self.bitness_64 = QCheckBox("64-бит (x64)")
-        
-        # Устанавливаем текущее значение
-        if database:
-            if database.app_arch == 'x86_64':
-                self.bitness_64.setChecked(True)
-            else:
-                self.bitness_32.setChecked(True)
-        else:
-            self.bitness_32.setChecked(True)
-        
-        # Взаимоисключающие чекбоксы
-        self.bitness_32.toggled.connect(lambda checked: self.bitness_64.setChecked(not checked) if checked else None)
-        self.bitness_64.toggled.connect(lambda checked: self.bitness_32.setChecked(not checked) if checked else None)
-        
-        bitness_layout.addWidget(self.bitness_32)
-        bitness_layout.addWidget(self.bitness_64)
-        bitness_layout.addStretch()
-        
-        form_layout.addRow("Разрядность:", bitness_layout)
         
         # Путь к 1cv8.exe (опционально)
         self.app_edit = QLineEdit()
@@ -214,11 +194,11 @@ class DatabaseSettingsDialog(QDialog):
         if platform.system() == 'Windows':
             # Проверяем оба пути - Program Files и Program Files (x86)
             base_paths = [
-                Path(r"C:\Program Files\1cv8"),
-                Path(r"C:\Program Files (x86)\1cv8")
+                (Path(r"C:\Program Files\1cv8"), "x64"),
+                (Path(r"C:\Program Files (x86)\1cv8"), "x86")
             ]
             
-            for base_path in base_paths:
+            for base_path, bitness in base_paths:
                 if base_path.exists():
                     # Ищем все подпапки с версиями
                     for item in base_path.iterdir():
@@ -227,7 +207,6 @@ class DatabaseSettingsDialog(QDialog):
                             exe_path = item / 'bin' / '1cv8.exe'
                             if exe_path.exists():
                                 # Добавляем версию с пометкой разрядности
-                                bitness = "x64" if "Program Files\\1cv8" in str(base_path) and "(x86)" not in str(base_path) else "x86"
                                 version_str = f"{item.name} ({bitness})"
                                 if version_str not in versions:
                                     versions.append(version_str)
@@ -239,10 +218,21 @@ class DatabaseSettingsDialog(QDialog):
     
     def get_settings(self):
         """Возвращает настройки в виде словаря"""
-        # Извлекаем версию из комбобокса
+        # Извлекаем версию и разрядность из комбобокса
         version_text = self.version_combo.currentText()
-        # Убираем пометку разрядности, если она есть
-        version = re.sub(r'\s*\([^)]*\)\s*$', '', version_text).strip()
+        
+        # Парсим версию и разрядность
+        # Формат: "8.3.23.2040 (x86)" или "8.3.23.2040 (x64)"
+        version = version_text
+        app_arch = 'x86'  # по умолчанию
+        
+        # Ищем разрядность в скобках
+        match = re.search(r'\(\s*(x86|x64)\s*\)\s*$', version_text)
+        if match:
+            arch_str = match.group(1)
+            app_arch = 'x86_64' if arch_str == 'x64' else 'x86'
+            # Убираем разрядность из версии
+            version = version_text[:match.start()].strip()
         
         return {
             'name': self.name_edit.text(),
@@ -251,7 +241,7 @@ class DatabaseSettingsDialog(QDialog):
             'usr': self.user_edit.text() if self.user_edit.text() else None,
             'pwd': self.password_edit.text() if self.password_edit.text() else None,
             'version': version if version else None,
-            'app_arch': 'x86_64' if self.bitness_64.isChecked() else 'x86',
+            'app_arch': app_arch,
             'app': self.app_edit.text() if self.app_edit.text() else None
         }
 
@@ -458,8 +448,8 @@ class TreeWindow(QMainWindow):
             if not cmd_line:
                 return False
             
-            # Выводим строку запуска в статус бар
-            self.statusBar.showMessage(f"Запуск: {cmd_line}")
+            # Выводим строку запуска в статус бар и держим её 5 секунд
+            self.statusBar.showMessage(f"🚀 Запуск: {cmd_line}", 5000)
             
             # Создаем временный BAT-файл и запускаем через него
             import tempfile
@@ -469,10 +459,10 @@ class TreeWindow(QMainWindow):
                 bat_file.write('exit\n')
                 bat_path = bat_file.name
             
+            # Запускаем BAT-файл
             os.startfile(bat_path)
             
             # Удаляем временный файл через 3 секунды
-            from PySide6.QtCore import QTimer
             QTimer.singleShot(3000, lambda: self._cleanup_temp_file(bat_path))
             
             return True
@@ -515,6 +505,42 @@ class TreeWindow(QMainWindow):
         
         # Запоминаем последнюю запущенную базу
         self.last_launched_db = database
+
+    def _clear_database_cache(self, database):
+        """Очищает кэш базы данных"""
+        try:
+            # Получаем путь к AppData
+            appdata_local = Path(os.environ.get('LOCALAPPDATA', ''))
+            appdata_roaming = Path(os.environ.get('APPDATA', ''))
+            
+            deleted_items = []
+            
+            # Очищаем программный кэш (AppData\Local\1C\1cv8\{database_id})
+            program_cache_path = appdata_local / '1C' / '1cv8' / database.id
+            if program_cache_path.exists():
+                try:
+                    shutil.rmtree(program_cache_path)
+                    deleted_items.append(f"✅ Программный кэш: {program_cache_path}")
+                except Exception as e:
+                    deleted_items.append(f"⚠️ Ошибка удаления программного кэша: {e}")
+            else:
+                deleted_items.append("ℹ️ Программный кэш не найден")
+            
+            # Очищаем пользовательский кэш (AppData\Roaming\1C\1Cv82\{database_id})
+            user_cache_path = appdata_roaming / '1C' / '1Cv82' / database.id
+            if user_cache_path.exists():
+                try:
+                    shutil.rmtree(user_cache_path)
+                    deleted_items.append(f"✅ Пользовательский кэш: {user_cache_path}")
+                except Exception as e:
+                    deleted_items.append(f"⚠️ Ошибка удаления пользовательского кэша: {e}")
+            else:
+                deleted_items.append("ℹ️ Пользовательский кэш не найден")
+            
+            return deleted_items
+            
+        except Exception as e:
+            return [f"❌ Ошибка очистки кэша: {e}"]
 
     def open_database(self):
         """Открыть базу (F3)"""
@@ -685,12 +711,15 @@ class TreeWindow(QMainWindow):
             reply = QMessageBox.question(
                 self,
                 "Удаление базы",
-                f"Удалить базу '{database.name}' из списка?\n\nВнимание: это не удалит файлы базы данных!",
+                f"Удалить базу '{database.name}' из списка?\n\nКэш базы также будет очищен.\n\nВнимание: это не удалит файлы базы данных!",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
             
             if reply == QMessageBox.Yes:
+                # Очищаем кэш перед удалением
+                cache_result = self._clear_database_cache(database)
+                
                 # Удаляем базу из списка
                 self.all_bases.remove(database)
                 
@@ -700,7 +729,15 @@ class TreeWindow(QMainWindow):
                 # Перезагружаем дерево
                 self.load_bases()
                 
-                self.statusBar.showMessage(f"✅ База '{database.name}' удалена из списка")
+                # Показываем результат
+                result_message = f"✅ База '{database.name}' удалена из списка\n\nРезультат очистки кэша:\n" + "\n".join(cache_result)
+                QMessageBox.information(
+                    self,
+                    "База удалена",
+                    result_message
+                )
+                
+                self.statusBar.showMessage(f"✅ База '{database.name}' удалена")
 
     def clear_cache(self):
         """Очистить кэш базы (Shift+Del)"""
@@ -720,49 +757,18 @@ class TreeWindow(QMainWindow):
         if reply != QMessageBox.Yes:
             return
         
-        try:
-            # Получаем путь к AppData
-            appdata_local = Path(os.environ.get('LOCALAPPDATA', ''))
-            appdata_roaming = Path(os.environ.get('APPDATA', ''))
-            
-            deleted_items = []
-            
-            # Очищаем программный кэш (AppData\Local\1C\1cv8\{database_id})
-            program_cache_path = appdata_local / '1C' / '1cv8' / database.id
-            if program_cache_path.exists():
-                try:
-                    shutil.rmtree(program_cache_path)
-                    deleted_items.append(f"Программный кэш: {program_cache_path}")
-                except Exception as e:
-                    deleted_items.append(f"⚠️ Ошибка удаления программного кэша: {e}")
-            else:
-                deleted_items.append("ℹ️ Программный кэш не найден")
-            
-            # Очищаем пользовательский кэш (AppData\Roaming\1C\1Cv82\{database_id})
-            user_cache_path = appdata_roaming / '1C' / '1Cv82' / database.id
-            if user_cache_path.exists():
-                try:
-                    shutil.rmtree(user_cache_path)
-                    deleted_items.append(f"Пользовательский кэш: {user_cache_path}")
-                except Exception as e:
-                    deleted_items.append(f"⚠️ Ошибка удаления пользовательского кэша: {e}")
-            else:
-                deleted_items.append("ℹ️ Пользовательский кэш не найден")
-            
-            # Показываем результат
-            result_message = "\n".join(deleted_items)
-            QMessageBox.information(
-                self,
-                "Результат очистки кэша",
-                result_message
-            )
-            
-            self.statusBar.showMessage(f"✅ Кэш базы '{database.name}' очищен")
-            
-        except Exception as e:
-            self.statusBar.showMessage(f"❌ Ошибка очистки кэша: {e}")
-            import traceback
-            traceback.print_exc()
+        # Очищаем кэш
+        deleted_items = self._clear_database_cache(database)
+        
+        # Показываем результат
+        result_message = "\n".join(deleted_items)
+        QMessageBox.information(
+            self,
+            "Результат очистки кэша",
+            result_message
+        )
+        
+        self.statusBar.showMessage(f"✅ Кэш базы '{database.name}' очищен")
 
     def add_database(self):
         """Добавить новую базу (Shift+F10)"""
@@ -876,7 +882,10 @@ class TreeWindow(QMainWindow):
                     if base.version:
                         f.write(f"Version={base.version}\n")
                     if base.app_arch:
-                        f.write(f"AppArch={base.app_arch}\n")
+                        # Сохраняем разрядность: x86 или x86_64
+                        # В файле пишем как x86 или x86 (для 32-бит)
+                        arch_str = 'x86' if base.app_arch == 'x86' else 'x86'
+                        f.write(f"AppArch={arch_str}\n")
                     if base.order_in_tree is not None:
                         f.write(f"OrderInTree={base.order_in_tree}\n")
                     if base.usr:
