@@ -116,13 +116,18 @@ class TreeWindow(QMainWindow):
 
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels([
-            "Имя базы", "Папка", "Тип подключения", "Connect", "Версия"
+            "Имя базы", "Connect", "Версия"
         ])
         
         self.tree = QTreeView()
         self.tree.setModel(self.model)
         self.tree.setEditTriggers(QTreeView.NoEditTriggers)
         self.tree.setSelectionBehavior(QTreeView.SelectRows)
+        
+        # Устанавливаем ширину колонок
+        self.tree.setColumnWidth(0, 350)  # Имя базы - увеличенная ширина
+        self.tree.setColumnWidth(1, 450)  # Connect - увеличенная ширина
+        self.tree.setColumnWidth(2, 100)  # Версия
         
         layout = QVBoxLayout()
         layout.addWidget(self.tree)
@@ -200,10 +205,11 @@ class TreeWindow(QMainWindow):
             print(f"Ошибка парсинга строки подключения: {e}")
             return connect_string
 
-    def _launch_1c_process(self, executable, mode, database):
+    def _build_launch_command(self, executable, mode, database):
         """
-        Запуск 1С через BAT-файл
+        Формирует командную строку для запуска 1С
         mode: 'ENTERPRISE' или 'DESIGNER'
+        Возвращает строку команды
         """
         try:
             # Формируем параметры командной строки
@@ -222,6 +228,26 @@ class TreeWindow(QMainWindow):
             
             # Собираем полную команду
             cmd_line = f'"{executable}" ' + ' '.join(f'"{p}"' if ' ' in p and not p.startswith('/') else p for p in params)
+            
+            return cmd_line
+            
+        except Exception as e:
+            print(f"Ошибка формирования командной строки: {e}")
+            return None
+
+    def _launch_1c_process(self, executable, mode, database):
+        """
+        Запуск 1С через BAT-файл
+        mode: 'ENTERPRISE' или 'DESIGNER'
+        """
+        try:
+            cmd_line = self._build_launch_command(executable, mode, database)
+            
+            if not cmd_line:
+                return False
+            
+            # Выводим строку запуска в статус бар
+            self.statusBar.showMessage(f"Запуск: {cmd_line}")
             
             print("\n" + "="*80)
             print(f"КОМАНДА ЗАПУСКА 1С ({mode}):")
@@ -270,7 +296,8 @@ class TreeWindow(QMainWindow):
             return
         
         if self._launch_1c_process(executable, "ENTERPRISE", database):
-            self.statusBar.showMessage(f"✅ База {database.name} запущена")
+            # Сообщение о запуске уже выведено в _launch_1c_process
+            pass
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске базы {database.name}")
 
@@ -286,7 +313,8 @@ class TreeWindow(QMainWindow):
             return
         
         if self._launch_1c_process(executable, "DESIGNER", database):
-            self.statusBar.showMessage(f"✅ Конфигуратор для {database.name} запущен")
+            # Сообщение о запуске уже выведено в _launch_1c_process
+            pass
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
 
@@ -418,7 +446,7 @@ class TreeWindow(QMainWindow):
         for folder_idx, (folder, dbases) in enumerate(folders.items()):
             folder_item = QStandardItem(folder)
             folder_item.setEditable(False)
-            row = [folder_item] + [QStandardItem("") for _ in range(4)]
+            row = [folder_item] + [QStandardItem("") for _ in range(2)]
             self.model.appendRow(row)
             
             for db_idx, base in enumerate(dbases):
@@ -428,8 +456,6 @@ class TreeWindow(QMainWindow):
                 vers = base.get_full_version()
                 row = [
                     QStandardItem(base.name),
-                    QStandardItem(folder),
-                    QStandardItem(base.get_connection_type()),
                     QStandardItem(base.connect),
                     QStandardItem(vers)
                 ]
