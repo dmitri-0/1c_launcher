@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
+from datetime import datetime
 
 @dataclass
 class Database1C:
@@ -14,8 +15,9 @@ class Database1C:
     order_in_tree: Optional[float] = None  # Порядок в дереве
     usr: Optional[str] = None  # Имя пользователя
     pwd: Optional[str] = None  # Пароль
-    original_folder: Optional[str] = None  # Оригинальная папка (сохраняется при добавлении в "Недавние")
+    original_folder: Optional[str] = None  # Оригинальная папка (только в памяти, не сохраняется)
     is_recent: bool = False  # Флаг принадлежности к "Недавним"
+    last_run_time: Optional[datetime] = None  # Время последнего запуска для сортировки недавних
     
     def __str__(self):
         return self.name
