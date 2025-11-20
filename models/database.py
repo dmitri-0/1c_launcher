@@ -13,11 +13,20 @@ class Database1C:
     version: Optional[str] = None
     app_arch: Optional[str] = None  # Разрядность: x86 или x86_64
     order_in_tree: Optional[float] = None  # Порядок в дереве
-    usr: Optional[str] = None  # Имя пользователя
-    pwd: Optional[str] = None  # Пароль
+    usr: Optional[str] = None  # Имя пользователя (deprecated, для обратной совместимости)
+    pwd: Optional[str] = None  # Пароль (deprecated, для обратной совместимости)
     original_folder: Optional[str] = None  # Оригинальная папка (только в памяти, не сохраняется)
     is_recent: bool = False  # Флаг принадлежности к "Недавним"
     last_run_time: Optional[datetime] = None  # Время последнего запуска для сортировки недавних
+    
+    # Новые поля для таблицы учетных данных
+    usr_enterprise: Optional[str] = None  # Пользователь для Предприятия
+    pwd_enterprise: Optional[str] = None  # Пароль для Предприятия
+    usr_configurator: Optional[str] = None  # Пользователь для Конфигуратора
+    pwd_configurator: Optional[str] = None  # Пароль для Конфигуратора
+    usr_storage: Optional[str] = None  # Пользователь для Хранилища
+    pwd_storage: Optional[str] = None  # Пароль для Хранилища
+    storage_path: Optional[str] = None  # Путь к хранилищу
     
     def __str__(self):
         return self.name
