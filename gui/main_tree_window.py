@@ -542,6 +542,13 @@ class TreeWindow(QMainWindow):
         except Exception as e:
             return [f"❌ Ошибка очистки кэша: {e}"]
 
+    def _delayed_reload_after_launch(self):
+        """Перезагружает базы с задержкой, чтобы сохранить сообщение о запуске"""
+        # Перезагружаем дерево
+        self.load_bases()
+        # Раскрываем "Недавние" и выделяем базу
+        self.expand_recent_and_select_last()
+
     def open_database(self):
         """Открыть базу (F3)"""
         database = self.get_selected_database()
@@ -556,10 +563,8 @@ class TreeWindow(QMainWindow):
         if self._launch_1c_process(executable, "ENTERPRISE", database):
             # Помечаем базу как недавнюю
             self._move_to_recent(database)
-            # Перезагружаем дерево
-            self.load_bases()
-            # Раскрываем "Недавние" и выделяем базу
-            self.expand_recent_and_select_last()
+            # Перезагружаем дерево с задержкой 5 секунд, чтобы сохранить сообщение о запуске
+            QTimer.singleShot(5000, self._delayed_reload_after_launch)
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске базы {database.name}")
 
@@ -577,10 +582,8 @@ class TreeWindow(QMainWindow):
         if self._launch_1c_process(executable, "DESIGNER", database):
             # Помечаем базу как недавнюю
             self._move_to_recent(database)
-            # Перезагружаем дерево
-            self.load_bases()
-            # Раскрываем "Недавние" и выделяем базу
-            self.expand_recent_and_select_last()
+            # Перезагружаем дерево с задержкой 5 секунд, чтобы сохранить сообщение о запуске
+            QTimer.singleShot(5000, self._delayed_reload_after_launch)
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
 
@@ -882,10 +885,8 @@ class TreeWindow(QMainWindow):
                     if base.version:
                         f.write(f"Version={base.version}\n")
                     if base.app_arch:
-                        # Сохраняем разрядность: x86 или x86_64
-                        # В файле пишем как x86 или x86 (для 32-бит)
-                        arch_str = 'x86' if base.app_arch == 'x86' else 'x86'
-                        f.write(f"AppArch={arch_str}\n")
+                        # Правильно сохраняем разрядность
+                        f.write(f"AppArch={base.app_arch}\n")
                     if base.order_in_tree is not None:
                         f.write(f"OrderInTree={base.order_in_tree}\n")
                     if base.usr:
