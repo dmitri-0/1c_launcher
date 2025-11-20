@@ -366,9 +366,13 @@ class TreeWindow(QMainWindow):
             pass
 
     def _move_to_recent(self, database):
-        """Перемещает базу в папку 'Недавние' в начало списка"""
-        # Изменяем папку базы на "Недавние"
-        database.folder = "/Недавние"
+        """Помечает базу как недавнюю и перемещает в начало списка"""
+        # Сохраняем оригинальную папку, если еще не сохранена
+        if not database.is_recent and not database.original_folder:
+            database.original_folder = database.folder
+        
+        # Помечаем базу как недавнюю
+        database.is_recent = True
         
         # Удаляем базу из текущей позиции в списке
         if database in self.all_bases:
@@ -395,7 +399,7 @@ class TreeWindow(QMainWindow):
             return
         
         if self._launch_1c_process(executable, "ENTERPRISE", database):
-            # Перемещаем базу в "Недавние"
+            # Помечаем базу как недавнюю
             self._move_to_recent(database)
             # Перезагружаем дерево
             self.load_bases()
@@ -416,7 +420,7 @@ class TreeWindow(QMainWindow):
             return
         
         if self._launch_1c_process(executable, "DESIGNER", database):
-            # Перемещаем базу в "Недавние"
+            # Помечаем базу как недавнюю
             self._move_to_recent(database)
             # Перезагружаем дерево
             self.load_bases()
@@ -426,7 +430,7 @@ class TreeWindow(QMainWindow):
             self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
 
     def copy_connection_string(self):
-        """Копировать строку подключения (Ctrl+C)"""
+        """Скопировать строку подключения (Ctrl+C)"""
         database = self.get_selected_database()
         if not database:
             return
@@ -507,13 +511,19 @@ class TreeWindow(QMainWindow):
     def save_bases(self):
         """Сохраняет базы в файл ibases.v8i"""
         try:
-            # Записываем базы из памяти, а не перечитываем из файла
+            # Записываем базы из памяти
             with open(IBASES_PATH, 'w', encoding=ENCODING) as f:
                 for base in self.all_bases:
                     f.write(f"[{base.name}]\n")
                     f.write(f"ID={base.id}\n")
                     f.write(f"Connect={base.connect}\n")
                     f.write(f"Folder={base.folder}\n")
+                    
+                    # Добавляем теги IsRecent и OriginalFolder
+                    if base.is_recent:
+                        f.write(f"IsRecent=1\n")
+                    if base.original_folder:
+                        f.write(f"OriginalFolder={base.original_folder}\n")
                     
                     if base.app:
                         f.write(f"App={base.app}\n")
@@ -547,7 +557,8 @@ class TreeWindow(QMainWindow):
         
         folders = defaultdict(list)
         for base in bases:
-            folder = base.get_folder_path()
+            # Используем get_display_folder() для отображения в дереве
+            folder = base.get_display_folder()
             folders[folder].append(base)
         
         for folder_idx, (folder, dbases) in enumerate(folders.items()):
