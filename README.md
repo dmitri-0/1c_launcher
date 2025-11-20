@@ -109,25 +109,25 @@ python main_tree_gui.py
 ## Формат файла ibases.v8i
 
 ```ini
-[АСТОР ТЕСТ]
-ID=58a7e941-2cb6-4376-91d9-f106e60b1522
-Connect=Srvr="srv-1c-8323:1541";Ref="AstorCO_1017_Pechericadv_2";
-Folder=/Тестовые
+[База Производство]
+ID=a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Connect=Srvr="production-server:1541";Ref="ProductionDB";
+Folder=/Рабочие
 IsRecent=1
-LastRunTime=2025-11-20T11:24:35.123456
+LastRunTime=2025-11-20T14:30:00.000000
 App=Auto
-Version=8.3.23.2040
-AppArch=x86
-OrderInTree=110421.333333333
-Usr=Печерица Дмитрий Валерьевич
-Pwd=3712
-UsrEnterprise=ПользовательПредприятие
-PwdEnterprise=пароль1
-UsrConfigurator=Администратор
-PwdConfigurator=
-UsrStorage=РазработчикИванов
-PwdStorage=storage123
-StoragePath=tcp://server:1542/database
+Version=8.3.24.1353
+AppArch=x86_64
+OrderInTree=100.0
+Usr=Пользователь
+Pwd=
+UsrEnterprise=БухгалтерИванов
+PwdEnterprise=pass123
+UsrConfigurator=АдминистраторСистемы
+PwdConfigurator=admin456
+UsrStorage=РазработчикПетров
+PwdStorage=dev789
+StoragePath=tcp://storage-server:1542/config-storage
 ```
 
 ### Описание полей:
