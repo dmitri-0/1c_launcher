@@ -126,7 +126,7 @@ class DatabaseSettingsDialog(QDialog):
         # Папка
         self.folder_edit = QLineEdit()
         self.folder_edit.setText(database.folder if database else "")
-        self.folder_edit.setPlaceholderText("Например: /Тестовые")
+        self.folder_edit.setPlaceholderText("Например: /Тестовые или /Рабочие/Магазины")
         form_layout.addRow("Папка:", self.folder_edit)
         
         # Строка подключения
@@ -254,7 +254,7 @@ class TreeWindow(QMainWindow):
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
         
-        self.bases_dict = {}  # Словарь для быстрого поиска баз по индексу
+        self.bases_dict = {}  # Словарь для быстрого поиска баз по индексу модели
         self.all_bases = []   # Список всех баз в памяти
         self.last_launched_db = None  # Последняя запущенная база
 
@@ -344,42 +344,45 @@ class TreeWindow(QMainWindow):
         # Берем первую ячейку выбранной строки
         index = indexes[0]
         
-        # Если это папка (родительский элемент), игнорируем
-        if not index.parent().isValid() and index.row() in [i for i in range(self.model.rowCount())]:
-            self.statusBar.showMessage("⚠️ Выберите базу, а не папку")
-            return None
+        # Получаем элемент модели
+        item = self.model.itemFromIndex(index)
         
-        # Получаем индекс базы из словаря
-        row = index.row()
-        parent_row = index.parent().row() if index.parent().isValid() else -1
+        # Проверяем, есть ли у элемента данные базы
+        if item and item.data(Qt.UserRole):
+            return item.data(Qt.UserRole)
         
-        key = (parent_row, row)
-        return self.bases_dict.get(key)
+        self.statusBar.showMessage("⚠️ Выберите базу, а не папку")
+        return None
 
     def get_current_folder(self):
-        """Получить папку, на которой стоит курсор (для новой базы)"""
+        """Получить полный путь папки, на которой стоит курсор (для новой базы)"""
         indexes = self.tree.selectedIndexes()
         if not indexes:
             return "/"
         
         index = indexes[0]
+        item = self.model.itemFromIndex(index)
         
-        # Если это папка (родительский элемент)
-        if not index.parent().isValid():
-            folder_item = self.model.item(index.row(), 0)
-            if folder_item:
-                folder_text = folder_item.text()
-                # Пропускаем "Недавние"
-                if "Недавние" in folder_text:
-                    return "/"
-                # Возвращаем папку с начальным слэшем
-                return f"/{folder_text}" if not folder_text.startswith("/") else folder_text
-        else:
-            # Если это база, берем её папку
-            database = self.get_selected_database()
-            if database and not database.is_recent:
-                return database.folder
+        # Строим полный путь, поднимаясь по дереву
+        folder_parts = []
+        current_item = item
         
+        while current_item:
+            # Проверяем, это база или папка
+            if current_item.data(Qt.UserRole):  # Это база
+                database = current_item.data(Qt.UserRole)
+                if not database.is_recent:
+                    return database.folder
+            else:  # Это папка
+                folder_name = current_item.text()
+                if "Недавние" not in folder_name:
+                    folder_parts.insert(0, folder_name)
+            
+            # Переходим к родителю
+            current_item = current_item.parent()
+        
+        if folder_parts:
+            return "/" + "/".join(folder_parts)
         return "/"
 
     def _parse_server_connect_string(self, connect_string):
@@ -448,8 +451,8 @@ class TreeWindow(QMainWindow):
             if not cmd_line:
                 return False
             
-            # Выводим строку запуска в статус бар и держим её 5 секунд
-            self.statusBar.showMessage(f"🚀 Запуск: {cmd_line}", 5000)
+            # Выводим строку запуска в статус бар без задержки
+            self.statusBar.showMessage(f"🚀 Запуск: {cmd_line}")
             
             # Создаем временный BAT-файл и запускаем через него
             import tempfile
@@ -543,7 +546,7 @@ class TreeWindow(QMainWindow):
             return [f"❌ Ошибка очистки кэша: {e}"]
 
     def _delayed_reload_after_launch(self):
-        """Перезагружает базы с задержкой, чтобы сохранить сообщение о запуске"""
+        """Перезагружает базы сразу после запуска"""
         # Перезагружаем дерево
         self.load_bases()
         # Раскрываем "Недавние" и выделяем базу
@@ -563,8 +566,8 @@ class TreeWindow(QMainWindow):
         if self._launch_1c_process(executable, "ENTERPRISE", database):
             # Помечаем базу как недавнюю
             self._move_to_recent(database)
-            # Перезагружаем дерево с задержкой 5 секунд, чтобы сохранить сообщение о запуске
-            QTimer.singleShot(5000, self._delayed_reload_after_launch)
+            # Перезагружаем дерево сразу после запуска
+            self._delayed_reload_after_launch()
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске базы {database.name}")
 
@@ -582,8 +585,8 @@ class TreeWindow(QMainWindow):
         if self._launch_1c_process(executable, "DESIGNER", database):
             # Помечаем базу как недавнюю
             self._move_to_recent(database)
-            # Перезагружаем дерево с задержкой 5 секунд, чтобы сохранить сообщение о запуске
-            QTimer.singleShot(5000, self._delayed_reload_after_launch)
+            # Перезагружаем дерево сразу после запуска
+            self._delayed_reload_after_launch()
         else:
             self.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
 
@@ -899,6 +902,132 @@ class TreeWindow(QMainWindow):
         except Exception as e:
             self.statusBar.showMessage(f"❌ Ошибка сохранения: {e}")
 
+    def _create_folder_structure(self, folder_path, bases):
+        """
+        Рекурсивно создает древовидную структуру папок.
+        folder_path: текущий путь папки (например, "Рабочие" или "Рабочие/Магазины")
+        bases: список баз
+        Возвращает QStandardItem для корневой папки
+        """
+        from collections import defaultdict
+        
+        # Группируем базы по первому уровню вложенности
+        folders_dict = defaultdict(list)  # {"subfolder": [bases...]}
+        current_level_bases = []  # Базы на текущем уровне
+        
+        for base in bases:
+            # Получаем относительный путь от folder_path
+            if folder_path:
+                if base.folder.startswith(folder_path + "/"):
+                    rel_path = base.folder[len(folder_path)+1:]
+                elif base.folder == folder_path:
+                    rel_path = ""
+                else:
+                    continue  # Эта база не относится к текущей папке
+            else:
+                rel_path = base.folder.lstrip("/")
+            
+            if "/" in rel_path:
+                # Есть подпапка
+                subfolder = rel_path.split("/", 1)[0]
+                folders_dict[subfolder].append(base)
+            elif rel_path:
+                # Нет подпапки, но есть имя папки
+                folders_dict[rel_path].append(base)
+            else:
+                # База на текущем уровне
+                current_level_bases.append(base)
+        
+        # Создаем элементы для подпапок рекурсивно
+        result_items = []
+        
+        for subfolder_name in sorted(folders_dict.keys()):
+            subfolder_bases = folders_dict[subfolder_name]
+            subfolder_path = f"{folder_path}/{subfolder_name}" if folder_path else subfolder_name
+            
+            # Создаем элемент папки
+            folder_item = QStandardItem(subfolder_name)
+            folder_item.setEditable(False)
+            
+            # Рекурсивно добавляем содержимое подпапки
+            self._add_bases_to_folder(folder_item, subfolder_path, subfolder_bases)
+            
+            result_items.append(folder_item)
+        
+        # Добавляем базы текущего уровня
+        for base in current_level_bases:
+            base_item = self._create_base_item(base)
+            result_items.append(base_item)
+        
+        return result_items
+    
+    def _add_bases_to_folder(self, folder_item, folder_path, bases):
+        """
+        Добавляет базы в папку, создавая подпапки при необходимости.
+        folder_item: QStandardItem родительской папки
+        folder_path: полный путь папки
+        bases: список баз для этой папки
+        """
+        from collections import defaultdict
+        
+        # Группируем базы по подпапкам
+        subfolders = defaultdict(list)
+        direct_bases = []
+        
+        for base in bases:
+            # Получаем относительный путь
+            if base.folder == "/" + folder_path:
+                direct_bases.append(base)
+            elif base.folder.startswith("/" + folder_path + "/"):
+                # Есть подпапка
+                rel_path = base.folder[len(folder_path)+2:]  # +2 для двух слэшей
+                if "/" in rel_path:
+                    subfolder_name = rel_path.split("/", 1)[0]
+                    subfolders[subfolder_name].append(base)
+                else:
+                    # Последний уровень вложенности
+                    subfolders[rel_path].append(base)
+        
+        # Создаем подпапки
+        for subfolder_name in sorted(subfolders.keys()):
+            subfolder_item = QStandardItem(subfolder_name)
+            subfolder_item.setEditable(False)
+            
+            subfolder_path = folder_path + "/" + subfolder_name
+            self._add_bases_to_folder(subfolder_item, subfolder_path, subfolders[subfolder_name])
+            
+            # Добавляем пустые ячейки для других колонок
+            row = [subfolder_item] + [QStandardItem("") for _ in range(2)]
+            folder_item.appendRow(row)
+        
+        # Добавляем базы на текущем уровне
+        for base in direct_bases:
+            vers = base.get_full_version()
+            row = [
+                QStandardItem(base.name),
+                QStandardItem(base.connect),
+                QStandardItem(vers)
+            ]
+            for item in row:
+                item.setEditable(False)
+            # Сохраняем ссылку на базу в первом элементе
+            row[0].setData(base, Qt.UserRole)
+            folder_item.appendRow(row)
+    
+    def _create_base_item(self, base):
+        """Создает строку элементов для базы"""
+        vers = base.get_full_version()
+        row = [
+            QStandardItem(base.name),
+            QStandardItem(base.connect),
+            QStandardItem(vers)
+        ]
+        for item in row:
+            item.setEditable(False)
+        # Сохраняем ссылку на базу
+        row[0].setData(base, Qt.UserRole)
+        return row
+
     def load_bases(self):
         """Загружает базы из файла"""
         from collections import defaultdict
@@ -911,33 +1040,58 @@ class TreeWindow(QMainWindow):
         self.model.removeRows(0, self.model.rowCount())
         self.bases_dict.clear()
         
-        folders = defaultdict(list)
-        for base in bases:
-            # Используем get_display_folder() для отображения в дереве
-            folder = base.get_display_folder()
-            folders[folder].append(base)
+        # Разделяем базы на "Недавние" и остальные
+        recent_bases = [base for base in bases if base.is_recent]
+        regular_bases = [base for base in bases if not base.is_recent]
         
-        for folder_idx, (folder, dbases) in enumerate(folders.items()):
-            folder_item = QStandardItem(folder)
+        # Создаем папку "Недавние" (если есть недавние базы)
+        if recent_bases:
+            folder_item = QStandardItem("Недавние")
             folder_item.setEditable(False)
             row = [folder_item] + [QStandardItem("") for _ in range(2)]
             self.model.appendRow(row)
             
-            for db_idx, base in enumerate(dbases):
-                # Сохраняем ссылку на базу
-                self.bases_dict[(folder_idx, db_idx)] = base
-                
+            for base in recent_bases:
                 vers = base.get_full_version()
-                row = [
+                base_row = [
                     QStandardItem(base.name),
                     QStandardItem(base.connect),
                     QStandardItem(vers)
                 ]
-                for item in row:
+                for item in base_row:
                     item.setEditable(False)
-                folder_item.appendRow(row)
-
-        self.statusBar.showMessage(f"Найдено баз: {sum(len(v) for v in folders.values())}")
+                # Сохраняем ссылку на базу
+                base_row[0].setData(base, Qt.UserRole)
+                folder_item.appendRow(base_row)
+        
+        # Группируем обычные базы по корневым папкам
+        root_folders = defaultdict(list)
+        for base in regular_bases:
+            folder = base.folder.lstrip("/")
+            if folder:
+                root_folder = folder.split("/")[0]
+                root_folders[root_folder].append(base)
+            else:
+                root_folders[""].append(base)
+        
+        # Создаем структуру папок
+        for root_folder_name in sorted(root_folders.keys()):
+            if not root_folder_name:  # Пропускаем пустую папку
+                continue
+            
+            folder_bases = root_folders[root_folder_name]
+            
+            # Создаем корневую папку
+            folder_item = QStandardItem(root_folder_name)
+            folder_item.setEditable(False)
+            row = [folder_item] + [QStandardItem("") for _ in range(2)]
+            self.model.appendRow(row)
+            
+            # Добавляем базы и подпапки
+            self._add_bases_to_folder(folder_item, root_folder_name, folder_bases)
+        
+        # Не выводим сообщение о количестве баз при обновлении
+        # self.statusBar.showMessage(f"Найдено баз: {len(bases)}")
 
     def expand_recent_and_select_last(self):
         """Раскрывает папку 'Недавние' и устанавливает курсор на последнюю запущенную базу"""
@@ -954,12 +1108,14 @@ class TreeWindow(QMainWindow):
                     # Ищем базу в папке "Недавние"
                     for db_idx in range(folder_item.rowCount()):
                         db_item = folder_item.child(db_idx, 0)
-                        if db_item and db_item.text() == self.last_launched_db.name:
-                            # Выделяем базу
-                            db_index = self.model.index(db_idx, 0, folder_index)
-                            self.tree.setCurrentIndex(db_index)
-                            self.tree.scrollTo(db_index)
-                            break
+                        if db_item:
+                            db = db_item.data(Qt.UserRole)
+                            if db and db.id == self.last_launched_db.id:
+                                # Выделяем базу
+                                db_index = self.model.index(db_idx, 0, folder_index)
+                                self.tree.setCurrentIndex(db_index)
+                                self.tree.scrollTo(db_index)
+                                break
                 else:
                     # Если нет последней запущенной базы, выделяем первую в "Недавние"
                     if folder_item.rowCount() > 0:
