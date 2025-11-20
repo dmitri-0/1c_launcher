@@ -106,11 +106,19 @@ class BaseReader:
             version=data.get('Version', None),
             app_arch=data.get('AppArch', None),  # Разрядность
             order_in_tree=order_in_tree,
-            usr=data.get('Usr', None),  # Пользователь
-            pwd=data.get('Pwd', None),  # Пароль
+            usr=data.get('Usr', None),  # Пользователь (старое поле)
+            pwd=data.get('Pwd', None),  # Пароль (старое поле)
             original_folder=data.get('OriginalFolder', None),  # Оригинальная папка (читаем, но не сохраняем)
             is_recent=is_recent,  # Флаг недавних
-            last_run_time=last_run_time  # Время последнего запуска
+            last_run_time=last_run_time,  # Время последнего запуска
+            # Новые поля для таблицы учетных данных
+            usr_enterprise=data.get('UsrEnterprise', None),
+            pwd_enterprise=data.get('PwdEnterprise', None),
+            usr_configurator=data.get('UsrConfigurator', None),
+            pwd_configurator=data.get('PwdConfigurator', None),
+            usr_storage=data.get('UsrStorage', None),
+            pwd_storage=data.get('PwdStorage', None),
+            storage_path=data.get('StoragePath', None),
         )
     
     def print_bases_list(self, bases: List[Database1C]):
