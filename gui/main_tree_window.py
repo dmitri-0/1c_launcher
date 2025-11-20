@@ -12,6 +12,7 @@ import subprocess
 import os
 from pathlib import Path
 import platform
+import re
 
 
 class DatabaseSettingsDialog(QDialog):
@@ -174,6 +175,31 @@ class TreeWindow(QMainWindow):
         key = (parent_row, row)
         return self.bases_dict.get(key)
 
+    def _parse_server_connect_string(self, connect_string):
+        """
+        Парсит строку подключения серверной базы и преобразует её в формат для /S параметра.
+        
+        Пример:
+        Вход: Srvr="srv-1c-8323:1541";Ref="AstorCO_1017_Pechericadv_2";
+        Выход: srv-1c-8323:1541\AstorCO_1017_Pechericadv_2
+        """
+        try:
+            # Ищем Srvr="..." и Ref="..."
+            srvr_match = re.search(r'Srvr="([^"]+)"', connect_string, re.IGNORECASE)
+            ref_match = re.search(r'Ref="([^"]+)"', connect_string, re.IGNORECASE)
+            
+            if srvr_match and ref_match:
+                server = srvr_match.group(1)
+                ref = ref_match.group(1)
+                return f"{server}\\{ref}"
+            
+            # Если не нашли оба параметра, возвращаем исходную строку
+            return connect_string
+            
+        except Exception as e:
+            print(f"Ошибка парсинга строки подключения: {e}")
+            return connect_string
+
     def _launch_1c_process(self, executable, mode, database):
         """
         Универсальный метод запуска 1С
@@ -185,7 +211,9 @@ class TreeWindow(QMainWindow):
             
             # Добавляем строку подключения
             if database.connect:
-                params.append(f"/S{database.connect}")
+                # Парсим строку подключения для серверных баз
+                parsed_connect = self._parse_server_connect_string(database.connect)
+                params.append(f'/S"{parsed_connect}"')
             
             # Добавляем пользователя, если задан
             if database.usr:
@@ -196,7 +224,7 @@ class TreeWindow(QMainWindow):
                 params.append(f"/P{database.pwd}")
             
             # Собираем полную команду
-            cmd_line = f'"{executable}" ' + ' '.join(f'"{p}"' if ' ' in p else p for p in params)
+            cmd_line = f'"{executable}" ' + ' '.join(f'"{p}"' if ' ' in p and not p.startswith('/') else p for p in params)
             
             # Выводим команду в консоль для отладки
             print("\n" + "="*80)
