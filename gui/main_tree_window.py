@@ -180,56 +180,39 @@ class TreeWindow(QMainWindow):
         mode: 'ENTERPRISE' или 'DESIGNER'
         """
         try:
-            # Формируем параметры командной строки
+            # Формируем параметры командной строки (всегда в кавычках)
             params = [mode]
             
-            # Добавляем строку подключения
             if database.connect:
-                params.append(f"/S{database.connect}")
-            
-            # Добавляем пользователя, если задан
+                params.append(f'/S"{database.connect}"')
             if database.usr:
-                params.append(f"/N{database.usr}")
-            
-            # Добавляем пароль, если задан
+                params.append(f'/N"{database.usr}"')
             if database.pwd:
-                params.append(f"/P{database.pwd}")
+                params.append(f'/P"{database.pwd}"')
             
-            # Собираем полную команду
-            cmd_line = f'"{executable}" ' + ' '.join(f'"{p}"' if ' ' in p else p for p in params)
+            # Формируем строку строго как в примере
+            cmd_line = f'"{executable}" ' + ' '.join(params)
             
-            # Выводим команду в консоль для отладки
             print("\n" + "="*80)
             print(f"КОМАНДА ЗАПУСКА 1С ({mode}):")
             print(cmd_line)
             print("="*80 + "\n")
             
             if platform.system() == 'Windows':
-                # МЕТОД 1: Используем os.startfile (работает как двойной клик в проводнике)
                 try:
-                    # Создаем временный .bat файл для запуска
                     import tempfile
                     with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False, encoding='cp866') as bat_file:
                         bat_file.write('@echo off\n')
                         bat_file.write(f'start "" {cmd_line}\n')
                         bat_file.write('exit\n')
                         bat_path = bat_file.name
-                    
-                    # Запускаем bat-файл через os.startfile
                     os.startfile(bat_path)
-                    
-                    # Удаляем временный файл через несколько секунд
                     from PySide6.QtCore import QTimer
                     QTimer.singleShot(3000, lambda: self._cleanup_temp_file(bat_path))
-                    
                     return True
-                    
                 except Exception as e:
                     print(f"МЕТОД 1 (os.startfile) не сработал: {e}")
-                    
-                    # МЕТОД 2: Используем subprocess с правильными флагами
                     try:
-                        # Используем shell=True для правильной обработки параметров
                         subprocess.Popen(
                             cmd_line,
                             shell=True,
@@ -241,10 +224,14 @@ class TreeWindow(QMainWindow):
                         return True
                     except Exception as e2:
                         print(f"МЕТОД 2 (subprocess с shell) не сработал: {e2}")
-                        
-                        # МЕТОД 3: Прямой запуск через subprocess без DETACHED_PROCESS
+                        command = [str(executable), mode]
+                        if database.connect:
+                            command.append(f'/S"{database.connect}"')
+                        if database.usr:
+                            command.append(f'/N"{database.usr}"')
+                        if database.pwd:
+                            command.append(f'/P"{database.pwd}"')
                         try:
-                            command = [str(executable)] + params
                             subprocess.Popen(
                                 command,
                                 stdout=subprocess.DEVNULL,
@@ -257,8 +244,13 @@ class TreeWindow(QMainWindow):
                             print(f"МЕТОД 3 (subprocess без detached) не сработал: {e3}")
                             raise e3
             else:
-                # Для Linux/Mac
-                command = [str(executable)] + params
+                command = [str(executable), mode]
+                if database.connect:
+                    command.append(f'/S"{database.connect}"')
+                if database.usr:
+                    command.append(f'/N"{database.usr}"')
+                if database.pwd:
+                    command.append(f'/P"{database.pwd}"')
                 subprocess.Popen(
                     command,
                     stdout=subprocess.DEVNULL,
@@ -266,7 +258,6 @@ class TreeWindow(QMainWindow):
                     stdin=subprocess.DEVNULL
                 )
                 return True
-                
         except Exception as e:
             print(f"ВСЕ МЕТОДЫ ЗАПУСКА НЕ СРАБОТАЛИ: {e}")
             import traceback
