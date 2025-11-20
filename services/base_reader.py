@@ -31,10 +31,13 @@ class BaseReader:
                     
                     # Если встретили новую секцию [НАЗВАНИЕ], сохраняем предыдущую базу
                     if line.startswith('[') and line.endswith(']'):
-                        # Сохраняем предыдущую базу, если она была
+                        # Сохраняем предыдущую базу, если она была и у нее непустой connect
                         if current_base and current_section_name:
-                            current_base['SectionName'] = current_section_name
-                            bases.append(self._create_database(current_base))
+                            # Проверяем наличие непустого connect
+                            connect = current_base.get('Connect', '').strip()
+                            if connect:  # Пропускаем записи с пустым connect
+                                current_base['SectionName'] = current_section_name
+                                bases.append(self._create_database(current_base))
                         
                         # Начинаем новую базу
                         current_base = {}
@@ -47,10 +50,13 @@ class BaseReader:
                         key, value = line.split('=', 1)
                         current_base[key] = value
                 
-                # Добавляем последнюю базу, если есть
+                # Добавляем последнюю базу, если есть и у нее непустой connect
                 if current_base and current_section_name:
-                    current_base['SectionName'] = current_section_name
-                    bases.append(self._create_database(current_base))
+                    # Проверяем наличие непустого connect
+                    connect = current_base.get('Connect', '').strip()
+                    if connect:  # Пропускаем записи с пустым connect
+                        current_base['SectionName'] = current_section_name
+                        bases.append(self._create_database(current_base))
             
             # Сортируем: сначала недавние (по времени запуска, самые свежие первыми), потом по папкам и OrderInTree
             bases.sort(key=lambda x: (
