@@ -123,16 +123,12 @@ class GlobalHotkeyManager:
     def activate_window(self):
         """Активирует и выводит окно на передний план.
         
-        Использует комбинацию Qt методов и Windows API для надежной активации.
+        Использует метод show_from_tray() из TreeWindow, который корректно обрабатывает
+        скрытое или свернутое состояние окна.
         """
         try:
-            # Восстанавливаем окно, если оно было свернуто
-            if self.window.isMinimized():
-                self.window.showNormal()
-            
-            # Активируем окно через Qt
-            self.window.activateWindow()
-            self.window.raise_()
+            # Используем единый метод show_from_tray из TreeWindow
+            self.window.show_from_tray()
             
             # Дополнительно используем Windows API для гарантированной активации
             if WINDOWS_HOTKEY_AVAILABLE:
