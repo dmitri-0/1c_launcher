@@ -1,7 +1,7 @@
 """
 Модуль для действий с процессами 1C (активация, закрытие, снятие задачи)
 """
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from services.process_manager import ProcessManager, Process1C
 from typing import Optional
 
@@ -55,7 +55,9 @@ class ProcessActions:
         success = ProcessManager.activate_window(process)
         if success:
             self.window.statusBar.showMessage(f"✅ Активирован: {process.name}", 3000)
-            # Сохраняем последний активированный процесс
+            # Сохраняем историю: предыдущий становится текущим, а новый - последним
+            if self.window.last_activated_process and self.window.last_activated_process.pid != process.pid:
+                self.window.previous_activated_process = self.window.last_activated_process
             self.window.last_activated_process = process
             # Сворачиваем лончер в трей
             self.window.minimize_to_tray()
@@ -81,7 +83,10 @@ class ProcessActions:
         
         if success:
             self.window.statusBar.showMessage(f"✅ {action_name}: {process.name}", 3000)
-            # Обновляем список процессов
-            self.window.refresh_opened_bases()
+            
+            # Обновляем список процессов с задержкой
+            # Для force=True - 100мс, для корректного закрытия - 500мс (даём время на завершение)
+            delay = 100 if force else 500
+            QTimer.singleShot(delay, self.window.refresh_opened_bases)
         else:
             self.window.statusBar.showMessage(f"❌ Не удалось закрыть: {process.name}", 3000)
