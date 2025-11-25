@@ -65,8 +65,8 @@ class TreeWindow(QMainWindow):
         """Настройка иконки в системном трее"""
         self.tray_icon = QSystemTrayIcon(self)
         
-        # Используем стандартную иконку приложения или создаем простую
-        icon = self.style().standardIcon(self.style().SP_ComputerIcon)
+        # Используем стандартную иконку приложения
+        icon = self.style().standardIcon(self.style().SP_DesktopIcon)
         self.tray_icon.setIcon(icon)
         
         # Создаем контекстное меню для трея
