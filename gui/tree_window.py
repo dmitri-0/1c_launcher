@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QMainWindow, QTreeView, QVBoxLayout, QWidget,
-    QStatusBar, QMessageBox, QSystemTrayIcon, QMenu
+    QStatusBar, QMessageBox, QSystemTrayIcon, QMenu, QStyle
 )
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QIcon, QAction
 from PySide6.QtCore import Qt
@@ -66,7 +66,7 @@ class TreeWindow(QMainWindow):
         self.tray_icon = QSystemTrayIcon(self)
         
         # Используем стандартную иконку приложения
-        icon = self.style().standardIcon(self.style().SP_DesktopIcon)
+        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon)
         self.tray_icon.setIcon(icon)
         
         # Создаем контекстное меню для трея
