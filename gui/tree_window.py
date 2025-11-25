@@ -24,10 +24,11 @@ import sys
 if platform.system() == 'Windows':
     try:
         import ctypes
+        from ctypes import wintypes
         WINDOWS_HOTKEY_AVAILABLE = True
     except ImportError:
         WINDOWS_HOTKEY_AVAILABLE = False
-        print("⚠️ Предупреждение: ctypes недоступен. Глобальные горячие клавиши будут отключены.")
+        print("⚠️ Предупреждение: ctypes/wintypes недоступны. Глобальные горячие клавиши будут отключены.")
 else:
     WINDOWS_HOTKEY_AVAILABLE = False
 
@@ -163,7 +164,7 @@ class TreeWindow(QMainWindow):
         if WINDOWS_HOTKEY_AVAILABLE and eventType == "windows_generic_MSG":
             try:
                 # Парсим структуру MSG из Windows
-                msg = ctypes.wintypes.MSG.from_address(int(message))
+                msg = wintypes.MSG.from_address(int(message))
                 
                 # WM_HOTKEY = 0x0312
                 if msg.message == 0x0312:
