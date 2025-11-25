@@ -95,12 +95,12 @@ class TreeWindow(QMainWindow):
     def minimize_to_tray(self):
         """Свернуть окно в трей"""
         self.hide()
-        self.tray_icon.showMessage(
-            "Базы 1С",
-            "Приложение свернуто в трей",
-            QSystemTrayIcon.Information,
-            2000
-        )
+        # self.tray_icon.showMessage(
+            # "Базы 1С",
+            # "Приложение свернуто в трей",
+            # QSystemTrayIcon.Information,
+            # 2000
+        # )
 
     def quit_application(self):
         """Полный выход из приложения"""
