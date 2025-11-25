@@ -26,7 +26,6 @@ class OpenedBasesTreeBuilder:
         # Создаем папку
         self.folder_item = QStandardItem(self.NODE_NAME)
         self.folder_item.setEditable(False)
-        #self.folder_item.setSelectable(False)
         self.folder_item.setData(None, Qt.UserRole)  # Отметка, что это не база ibases
 
         # Вставляем процессы
