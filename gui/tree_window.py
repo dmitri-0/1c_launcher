@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (
     QMainWindow, QTreeView, QVBoxLayout, QWidget,
-    QStatusBar, QMessageBox
+    QStatusBar, QMessageBox, QSystemTrayIcon, QMenu
 )
-from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
+from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QIcon, QAction
 from PySide6.QtCore import Qt
 from services.base_reader import BaseReader
 from config import IBASES_PATH, ENCODING
@@ -47,6 +47,9 @@ class TreeWindow(QMainWindow):
         self.all_bases = []
         self.last_launched_db = None
 
+        # Настройка трея
+        self.setup_tray_icon()
+
         # Вспомогательные менеджеры и логика
         self.hotkey_manager = GlobalHotkeyManager(self)
         self.actions = DatabaseActions(self, self.all_bases, self.save_bases, self.reload_and_navigate)
@@ -58,9 +61,62 @@ class TreeWindow(QMainWindow):
         self.load_bases()
         self.expand_recent_and_select_last()
 
-    def closeEvent(self, event):
+    def setup_tray_icon(self):
+        """Настройка иконки в системном трее"""
+        self.tray_icon = QSystemTrayIcon(self)
+        
+        # Используем стандартную иконку приложения или создаем простую
+        icon = self.style().standardIcon(self.style().SP_ComputerIcon)
+        self.tray_icon.setIcon(icon)
+        
+        # Создаем контекстное меню для трея
+        tray_menu = QMenu()
+        
+        show_action = QAction("Показать", self)
+        show_action.triggered.connect(self.show_from_tray)
+        tray_menu.addAction(show_action)
+        
+        quit_action = QAction("Выход", self)
+        quit_action.triggered.connect(self.quit_application)
+        tray_menu.addAction(quit_action)
+        
+        self.tray_icon.setContextMenu(tray_menu)
+        
+        # Двойной клик по иконке трея показывает окно
+        self.tray_icon.activated.connect(self.tray_icon_activated)
+        
+        self.tray_icon.show()
+
+    def tray_icon_activated(self, reason):
+        """Обработка активации иконки в трее"""
+        if reason == QSystemTrayIcon.DoubleClick:
+            self.show_from_tray()
+
+    def show_from_tray(self):
+        """Показать окно из трея"""
+        self.showNormal()
+        self.activateWindow()
+
+    def minimize_to_tray(self):
+        """Свернуть окно в трей"""
+        self.hide()
+        self.tray_icon.showMessage(
+            "Базы 1С",
+            "Приложение свернуто в трей",
+            QSystemTrayIcon.Information,
+            2000
+        )
+
+    def quit_application(self):
+        """Полный выход из приложения"""
         self.hotkey_manager.unregister()
-        super().closeEvent(event)
+        self.tray_icon.hide()
+        self.close()
+
+    def closeEvent(self, event):
+        """При закрытии окна сворачиваем в трей вместо выхода"""
+        event.ignore()
+        self.minimize_to_tray()
 
     def nativeEvent(self, eventType, message):
         handled, result = self.hotkey_manager.handle_native_event(eventType, message)
@@ -79,7 +135,7 @@ class TreeWindow(QMainWindow):
             "Del": lambda: self.operations.delete_database(self.operations.get_selected_database(self.model, self.tree)),
             "Shift+Del": lambda: self.operations.clear_cache(self.operations.get_selected_database(self.model, self.tree)),
             "Shift+F10": lambda: self.operations.add_database(Database1C, DatabaseSettingsDialog, lambda: self.operations.get_current_folder(self.model, self.tree)),
-            "Esc": self.close
+            "Esc": self.minimize_to_tray
         }
         for key, handler in shortcuts.items():
             shortcut = QShortcut(QKeySequence(key), self)
