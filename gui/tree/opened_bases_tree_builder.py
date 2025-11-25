@@ -6,7 +6,6 @@ from PySide6.QtCore import Qt
 from services.process_manager import ProcessManager, Process1C
 
 class OpenedBasesTreeBuilder:
-    HEADER = ["Открытая база (процесс)", "Окно", "PID"]
     NODE_NAME = "Открытые базы"
 
     def __init__(self, model):
@@ -29,11 +28,6 @@ class OpenedBasesTreeBuilder:
         self.folder_item.setEditable(False)
         self.folder_item.setSelectable(False)
         self.folder_item.setData(None, Qt.UserRole)  # Отметка, что это не база ibases
-
-        # Заголовки
-        self.folder_item.appendRow([
-            QStandardItem(h) for h in self.HEADER
-        ])
 
         # Вставляем процессы
         processes = ProcessManager.get_running_processes()
@@ -59,7 +53,7 @@ class OpenedBasesTreeBuilder:
         result = []
         if not self.folder_item:
             return result
-        for i in range(1, self.folder_item.rowCount()):
+        for i in range(0, self.folder_item.rowCount()):
             item = self.folder_item.child(i, 0)
             if item and item.data(Qt.UserRole):
                 result.append(item)
