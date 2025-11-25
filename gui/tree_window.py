@@ -18,9 +18,25 @@ import uuid
 from datetime import datetime
 import shutil
 import tempfile
+import sys
+
+# Импорт для глобальных горячих клавиш (только для Windows)
+if platform.system() == 'Windows':
+    try:
+        import win32con
+        import win32gui
+        WINDOWS_HOTKEY_AVAILABLE = True
+    except ImportError:
+        WINDOWS_HOTKEY_AVAILABLE = False
+        print("Предупреждение: pywin32 не установлен. Глобальные горячие клавиши недоступны.")
+else:
+    WINDOWS_HOTKEY_AVAILABLE = False
 
 
 class TreeWindow(QMainWindow):
+    # ID для горячей клавиши
+    HOTKEY_ID = 1
+    
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Базы 1С")
@@ -31,6 +47,7 @@ class TreeWindow(QMainWindow):
         self.bases_dict = {}
         self.all_bases = []
         self.last_launched_db = None
+        self.hotkey_registered = False
 
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels([
@@ -53,8 +70,106 @@ class TreeWindow(QMainWindow):
         self.setCentralWidget(container)
         
         self.setup_shortcuts()
+        self.register_global_hotkey()
         self.load_bases()
         self.expand_recent_and_select_last()
+
+    def register_global_hotkey(self):
+        """Регистрирует глобальную горячую клавишу Win+1"""
+        if not WINDOWS_HOTKEY_AVAILABLE:
+            return
+        
+        try:
+            # Получаем ID окна
+            hwnd = int(self.winId())
+            
+            # Регистрируем Win+1 (MOD_WIN = 0x0008, VK_1 = 0x31)
+            # MOD_WIN = 0x0008, MOD_ALT = 0x0001, MOD_CONTROL = 0x0002, MOD_SHIFT = 0x0004
+            import ctypes
+            user32 = ctypes.windll.user32
+            
+            MOD_WIN = 0x0008
+            VK_1 = 0x31  # Клавиша '1'
+            
+            result = user32.RegisterHotKey(hwnd, self.HOTKEY_ID, MOD_WIN, VK_1)
+            
+            if result:
+                self.hotkey_registered = True
+                print("✅ Глобальная горячая клавиша Win+1 зарегистрирована")
+            else:
+                print("⚠️ Не удалось зарегистрировать глобальную горячую клавишу Win+1")
+                
+        except Exception as e:
+            print(f"❌ Ошибка регистрации глобальной горячей клавиши: {e}")
+
+    def unregister_global_hotkey(self):
+        """Отменяет регистрацию глобальной горячей клавиши"""
+        if not WINDOWS_HOTKEY_AVAILABLE or not self.hotkey_registered:
+            return
+        
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            hwnd = int(self.winId())
+            
+            user32.UnregisterHotKey(hwnd, self.HOTKEY_ID)
+            self.hotkey_registered = False
+            print("✅ Глобальная горячая клавиша отменена")
+            
+        except Exception as e:
+            print(f"❌ Ошибка отмены регистрации глобальной горячей клавиши: {e}")
+
+    def nativeEvent(self, eventType, message):
+        """Перехватывает нативные события Windows для обработки глобальных горячих клавиш"""
+        if WINDOWS_HOTKEY_AVAILABLE and eventType == "windows_generic_MSG":
+            try:
+                import ctypes
+                
+                # Структура MSG в Windows
+                msg = ctypes.wintypes.MSG.from_address(int(message))
+                
+                # WM_HOTKEY = 0x0312
+                if msg.message == 0x0312:
+                    if msg.wParam == self.HOTKEY_ID:
+                        # Активируем окно
+                        self.activate_window()
+                        return True, 0
+                        
+            except Exception as e:
+                print(f"Ошибка обработки nativeEvent: {e}")
+        
+        return super().nativeEvent(eventType, message)
+
+    def activate_window(self):
+        """Активирует и выводит окно на передний план"""
+        try:
+            # Показываем окно, если оно было свернуто
+            if self.isMinimized():
+                self.showNormal()
+            
+            # Активируем окно через Qt
+            self.activateWindow()
+            self.raise_()
+            
+            # Дополнительно используем Windows API для гарантированной активации
+            if WINDOWS_HOTKEY_AVAILABLE:
+                import ctypes
+                hwnd = int(self.winId())
+                user32 = ctypes.windll.user32
+                
+                # SetForegroundWindow требует, чтобы окно было видимо
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE = 9
+                user32.SetForegroundWindow(hwnd)
+                
+            print("✅ Окно активировано")
+            
+        except Exception as e:
+            print(f"❌ Ошибка активации окна: {e}")
+
+    def closeEvent(self, event):
+        """Обработчик закрытия окна - отменяем регистрацию горячей клавиши"""
+        self.unregister_global_hotkey()
+        super().closeEvent(event)
 
     def setup_shortcuts(self):
         """Настройка горячих клавиш"""
