@@ -42,8 +42,8 @@ class TreeWindow(QMainWindow):
     
     # Константы для глобальной горячей клавиши
     HOTKEY_ID = 1
-    HOTKEY_MODIFIERS = 0x0008  # MOD_WIN (можно изменить на MOD_ALT=0x0001, MOD_CONTROL=0x0002, MOD_SHIFT=0x0004)
-    HOTKEY_VK = 0x31  # VK_1 (код виртуальной клавиши '1')
+    HOTKEY_MODIFIERS = 0x0006  # MOD_CONTROL (0x0002) + MOD_SHIFT (0x0004)
+    HOTKEY_VK = 0xC0  # VK_OEM_3 (клавиша тильды/ё)
     
     def __init__(self):
         super().__init__()
