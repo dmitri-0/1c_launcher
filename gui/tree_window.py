@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QMainWindow, QTreeView, QVBoxLayout, QWidget,
-    QStatusBar, QMessageBox, QSystemTrayIcon, QMenu, QStyle
+    QStatusBar, QMessageBox, QSystemTrayIcon, QMenu, QStyle, QApplication
 )
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QIcon, QAction
 from PySide6.QtCore import Qt
@@ -64,27 +64,22 @@ class TreeWindow(QMainWindow):
     def setup_tray_icon(self):
         """Настройка иконки в системном трее"""
         self.tray_icon = QSystemTrayIcon(self)
-        
         # Используем стандартную иконку приложения
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon)
         self.tray_icon.setIcon(icon)
-        
+
         # Создаем контекстное меню для трея
         tray_menu = QMenu()
-        
         show_action = QAction("Показать", self)
         show_action.triggered.connect(self.show_from_tray)
         tray_menu.addAction(show_action)
-        
         quit_action = QAction("Выход", self)
         quit_action.triggered.connect(self.quit_application)
         tray_menu.addAction(quit_action)
-        
         self.tray_icon.setContextMenu(tray_menu)
-        
+
         # Двойной клик по иконке трея показывает окно
         self.tray_icon.activated.connect(self.tray_icon_activated)
-        
         self.tray_icon.show()
 
     def tray_icon_activated(self, reason):
@@ -111,7 +106,7 @@ class TreeWindow(QMainWindow):
         """Полный выход из приложения"""
         self.hotkey_manager.unregister()
         self.tray_icon.hide()
-        self.close()
+        QApplication.quit()
 
     def closeEvent(self, event):
         """При закрытии окна сворачиваем в трей вместо выхода"""
