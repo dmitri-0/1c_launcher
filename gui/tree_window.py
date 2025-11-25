@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (
     QMainWindow, QTreeView, QVBoxLayout, QWidget,
-    QStatusBar, QMessageBox, QShortcut
+    QStatusBar, QMessageBox
 )
-from PySide6.QtGui import QStandardItemModel, QKeySequence
+from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
 from PySide6.QtCore import Qt
 from services.base_reader import BaseReader
 from config import IBASES_PATH, ENCODING
