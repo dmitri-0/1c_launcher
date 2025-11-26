@@ -1,5 +1,5 @@
 """
-Модуль для управления процессами 1cv8.exe
+Модуль для управления процессами 1cv8.exe и 1cv8c.exe
 Позволяет:
 - Получать список запущенных процессов 1C
 - Активировать окно процесса
@@ -34,26 +34,26 @@ class Process1C:
 
 class ProcessManager:
     """
-    Менеджер для работы с процессами 1cv8.exe
+    Менеджер для работы с процессами 1cv8.exe и 1cv8c.exe
     """
     
-    PROCESS_NAME = "1cv8.exe"
+    PROCESS_NAMES = ["1cv8.exe", "1cv8c.exe"]
     
     @staticmethod
     def get_running_processes() -> List[Process1C]:
         """
-        Получить список всех запущенных процессов 1cv8.exe
+        Получить список всех запущенных процессов 1cv8.exe и 1cv8c.exe
         
         Returns:
             Список Process1C объектов
         """
         processes = []
         
-        # Собираем PID всех процессов 1cv8.exe
+        # Собираем PID всех процессов 1cv8.exe и 1cv8c.exe
         process_pids = []
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                if proc.info['name'].lower() == ProcessManager.PROCESS_NAME.lower():
+                if proc.info['name'].lower() in [name.lower() for name in ProcessManager.PROCESS_NAMES]:
                     process_pids.append(proc.info['pid'])
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -168,9 +168,9 @@ class ProcessManager:
             hwnd = win32gui.GetForegroundWindow()
             _, pid = win32process.GetWindowThreadProcessId(hwnd)
             
-            # Проверяем, является ли этот процесс 1cv8.exe
+            # Проверяем, является ли этот процесс одним из отслеживаемых
             proc = psutil.Process(pid)
-            if proc.name().lower() == ProcessManager.PROCESS_NAME.lower():
+            if proc.name().lower() in [name.lower() for name in ProcessManager.PROCESS_NAMES]:
                 title = win32gui.GetWindowText(hwnd)
                 return Process1C(pid=pid, name=title, hwnd=hwnd)
         except Exception:
