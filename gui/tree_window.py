@@ -37,7 +37,7 @@ class TreeWindow(QMainWindow):
         self.tree.setSelectionBehavior(QTreeView.SelectRows)
         self.tree.setColumnWidth(0, 350)
         self.tree.setColumnWidth(1, 450)
-        self.tree.setColumnWidth(2, 100)
+        self.tree.setColumnWidth(2, 60)
         layout = QVBoxLayout()
         layout.addWidget(self.tree)
         container = QWidget()
