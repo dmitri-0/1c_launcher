@@ -84,9 +84,9 @@ class ProcessActions:
         if success:
             self.window.statusBar.showMessage(f"✅ {action_name}: {process.name}", 3000)
             
-            # Обновляем список процессов с задержкой
+            # Обновляем список процессов с задержкой и восстанавливаем позицию
             # Для force=True - 100мс, для корректного закрытия - 500мс (даём время на завершение)
             delay = 100 if force else 500
-            QTimer.singleShot(delay, self.window.refresh_opened_bases)
+            QTimer.singleShot(delay, self.window.refresh_opened_bases_and_restore)
         else:
             self.window.statusBar.showMessage(f"❌ Не удалось закрыть: {process.name}", 3000)
