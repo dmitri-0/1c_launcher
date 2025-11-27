@@ -195,10 +195,16 @@ class TreeWindow(QMainWindow):
         self.tree_builder.build_tree(self.all_bases)
 
     def refresh_opened_bases(self):
-        folder_item = self.opened_bases_builder.build_tree()
-        if folder_item:
-            index = self.tree.model().indexFromItem(folder_item)
-            self.tree.setFirstColumnSpanned(index.row(), index.parent(), True)
+        result = self.opened_bases_builder.build_tree()
+        if result:
+            folder_item, process_count = result
+            folder_index = self.tree.model().indexFromItem(folder_item)
+            # Объединяем ячейки для самой папки
+            self.tree.setFirstColumnSpanned(folder_index.row(), folder_index.parent(), True)
+            
+            # Объединяем ячейки для каждого процесса (первые 2 колонки)
+            for proc_row in range(process_count):
+                self.tree.setFirstColumnSpanned(proc_row, folder_index, True)
 
     def save_bases(self):
         try:
