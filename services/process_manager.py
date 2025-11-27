@@ -63,8 +63,9 @@ class ProcessManager:
             window_info = ProcessManager._find_main_window(pid)
             if window_info:
                 hwnd, title = window_info
-                if title:  # Только окна с заголовком
-                    processes.append(Process1C(pid=pid, name=title, hwnd=hwnd))
+                # Если заголовка нет - отображаем "Без имени"
+                display_name = title if title else "Без имени"
+                processes.append(Process1C(pid=pid, name=display_name, hwnd=hwnd))
         
         return processes
     
@@ -77,7 +78,7 @@ class ProcessManager:
             pid: ID процесса
             
         Returns:
-            (hwnd, title) или None
+            (hwnd, title) или None, где title может быть пустой строкой
         """
         result = []
         
@@ -89,7 +90,8 @@ class ProcessManager:
             if window_pid == pid:
                 title = win32gui.GetWindowText(hwnd)
                 # Проверяем, что это главное окно (не дочернее)
-                if win32gui.GetParent(hwnd) == 0 and title:
+                # Теперь принимаем окна даже без заголовка
+                if win32gui.GetParent(hwnd) == 0:
                     result.append((hwnd, title))
             return True
         
@@ -172,7 +174,9 @@ class ProcessManager:
             proc = psutil.Process(pid)
             if proc.name().lower() in [name.lower() for name in ProcessManager.PROCESS_NAMES]:
                 title = win32gui.GetWindowText(hwnd)
-                return Process1C(pid=pid, name=title, hwnd=hwnd)
+                # Если заголовка нет - отображаем "Без имени"
+                display_name = title if title else "Без имени"
+                return Process1C(pid=pid, name=display_name, hwnd=hwnd)
         except Exception:
             pass
         
