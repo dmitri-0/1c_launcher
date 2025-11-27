@@ -15,7 +15,7 @@ class OpenedBasesTreeBuilder:
     def build_tree(self):
         """
         Создает/обновляет ветку "Открытые базы" со всеми процессами 1cv8.exe
-        Возвращает folder_item для последующего объединения ячеек
+        Возвращает кортеж (folder_item, process_count) для последующего объединения ячеек
         """
         # Ищем, удаляем старую папку если уже есть
         root = self.model
@@ -31,6 +31,7 @@ class OpenedBasesTreeBuilder:
 
         # Вставляем процессы (только имя, без hwnd и pid)
         processes = ProcessManager.get_running_processes()
+        process_count = 0
         for proc in processes:
             row = [QStandardItem(proc.name)]
             # Записываем объект в data, чтобы потом работать
@@ -38,11 +39,12 @@ class OpenedBasesTreeBuilder:
                 item.setEditable(False)
             row[0].setData(proc, Qt.UserRole)
             self.folder_item.appendRow(row)
+            process_count += 1
 
         # Вставляем её первой!
         root.insertRow(0, [self.folder_item])
         
-        return self.folder_item
+        return self.folder_item, process_count
 
     def get_process_items(self):
         """
