@@ -64,7 +64,14 @@ class ProcessManager:
             if window_info:
                 hwnd, title = window_info
                 # Если заголовка нет - отображаем "Без имени"
-                display_name = title if title else "Без имени"
+                base_name = title if title else "Без имени"
+                
+                # Добавляем префикс: К для Конфигуратора, П для остальных
+                if title and "Конфигуратор" in title:
+                    display_name = f"К: {base_name}"
+                else:
+                    display_name = f"П: {base_name}"
+                
                 processes.append(Process1C(pid=pid, name=display_name, hwnd=hwnd))
         
         return processes
