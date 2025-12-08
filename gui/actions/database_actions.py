@@ -234,7 +234,7 @@ class DatabaseActions:
         self.reload_callback()
     
     def _get_1c_executable(self, database):
-        """Определяет путь к исполняемому файлу 1C с учетом разрядности.
+        """Определяет путь к исполняемому файлу 1C с учетом разрядности и типа клиента.
         
         Args:
             database: База данных
@@ -243,6 +243,13 @@ class DatabaseActions:
             Path: Путь к исполняемому файлу или None
         """
         bitness = database.app_arch or 'x86'
+        client_type = database.client_type or 'thick'
+        
+        # Определяем имя файла в зависимости от типа клиента
+        if client_type == 'thin':
+            exe_name = '1cv8c.exe'
+        else:
+            exe_name = '1cv8.exe'
         
         if database.app:
             path = Path(database.app)
@@ -253,20 +260,22 @@ class DatabaseActions:
             if database.version:
                 version = database.version
                 if bitness == 'x86_64':
-                    path = Path(rf"C:\Program Files\1cv8\{version}\bin\1cv8.exe")
+                    path = Path(rf"C:\Program Files\1cv8\{version}\bin\{exe_name}")
                 else:
-                    path = Path(rf"C:\Program Files (x86)\1cv8\{version}\bin\1cv8.exe")
+                    path = Path(rf"C:\Program Files (x86)\1cv8\{version}\bin\{exe_name}")
                 
                 if path.exists():
                     return path
             
-            common_paths = [
-                Path(r"C:\Program Files\1cv8\common\1cestart.exe"),
-                Path(r"C:\Program Files (x86)\1cv8\common\1cestart.exe"),
-            ]
-            
-            for path in common_paths:
-                if path.exists():
-                    return path
+            # Проверяем общие пути (только для толстого клиента)
+            if client_type == 'thick':
+                common_paths = [
+                    Path(r"C:\Program Files\1cv8\common\1cestart.exe"),
+                    Path(r"C:\Program Files (x86)\1cv8\common\1cestart.exe"),
+                ]
+                
+                for path in common_paths:
+                    if path.exists():
+                        return path
         
         return None
