@@ -234,6 +234,8 @@ class TreeWindow(QMainWindow):
                         f.write(f"Version={base.version}\n")
                     if base.app_arch:
                         f.write(f"AppArch={base.app_arch}\n")
+                    if base.client_type:
+                        f.write(f"ClientType={base.client_type}\n")
                     if base.order_in_tree is not None:
                         f.write(f"OrderInTree={base.order_in_tree}\n")
                     if base.usr:
@@ -254,8 +256,6 @@ class TreeWindow(QMainWindow):
                         f.write(f"UsrStorage={base.usr_storage}\n")
                     if base.pwd_storage:
                         f.write(f"PwdStorage={base.pwd_storage}\n")
-                    if base.client_type:
-                        f.write(f"ClientType={base.client_type}\n")
                     f.write("\n")
         except Exception as e:
             self.statusBar.showMessage(f"❌ Ошибка сохранения: {e}")
