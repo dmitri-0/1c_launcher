@@ -1,4 +1,4 @@
-"""CRUD и вспомогательные операции над базами 1С.
+"""Операции CRUD и вспомогательные операции над базами 1С.
 
 Отвечает за:
 - Добавление, редактирование, копирование, удаление баз
@@ -86,6 +86,7 @@ class DatabaseOperations:
                 usr_storage=database.usr_storage,
                 pwd_storage=database.pwd_storage,
                 storage_path=database.storage_path,
+                client_type=database.client_type,
             )
             current_date = datetime.now().strftime("%Y-%m-%d")
             database.name = f"{database.name} {current_date}"
@@ -116,6 +117,7 @@ class DatabaseOperations:
             database.pwd_configurator = settings['pwd_configurator']
             database.usr_storage = settings['usr_storage']
             database.pwd_storage = settings['pwd_storage']
+            database.client_type = settings['client_type']
             self.save_callback()
             self.reload_callback()
             self.window.statusBar.showMessage(f"✅ Настройки базы {database.name} сохранены")
@@ -201,6 +203,7 @@ class DatabaseOperations:
             usr_storage=None,
             pwd_storage=None,
             storage_path=None,
+            client_type='thick',
         )
         dialog = DatabaseSettingsDialog(self.window, new_database)
         if dialog.exec():
@@ -220,6 +223,7 @@ class DatabaseOperations:
             new_database.pwd_configurator = settings['pwd_configurator']
             new_database.usr_storage = settings['usr_storage']
             new_database.pwd_storage = settings['pwd_storage']
+            new_database.client_type = settings['client_type']
             self.all_bases.append(new_database)
             self.save_callback()
             self.reload_callback()
