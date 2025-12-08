@@ -72,6 +72,19 @@ class DatabaseSettingsDialog(QDialog):
         
         form_layout.addRow("Версия:", self.version_combo)
         
+        # Тип клиента - выпадающий список
+        self.client_type_combo = QComboBox()
+        self.client_type_combo.addItem("Толстый клиент (1cv8.exe)", "thick")
+        self.client_type_combo.addItem("Тонкий клиент (1cv8c.exe)", "thin")
+        
+        # Устанавливаем текущее значение
+        if database and database.client_type == 'thin':
+            self.client_type_combo.setCurrentIndex(1)
+        else:
+            self.client_type_combo.setCurrentIndex(0)  # По умолчанию толстый клиент
+        
+        form_layout.addRow("Тип клиента:", self.client_type_combo)
+        
         # Путь к 1cv8.exe (опционально)
         self.app_edit = QLineEdit()
         self.app_edit.setText(database.app if database and database.app else "")
@@ -187,6 +200,9 @@ class DatabaseSettingsDialog(QDialog):
             # Убираем разрядность из версии
             version = version_text[:match.start()].strip()
         
+        # Получаем тип клиента
+        client_type = self.client_type_combo.currentData()
+        
         return {
             'name': self.name_edit.text(),
             'folder': self.folder_edit.text(),
@@ -195,6 +211,7 @@ class DatabaseSettingsDialog(QDialog):
             'app_arch': app_arch,
             'app': self.app_edit.text() if self.app_edit.text() else None,
             'storage_path': self.storage_path_edit.text() if self.storage_path_edit.text() else None,
+            'client_type': client_type,  # Добавляем тип клиента
             # Данные из таблицы
             'usr_enterprise': self.credentials_table.item(0, 0).text() or None,
             'pwd_enterprise': self.credentials_table.item(1, 0).text() or None,
