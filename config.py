@@ -8,4 +8,5 @@ IBASES_PATH = Path(os.getenv('USERPROFILE')) / 'AppData' / 'Roaming' / '1C' / '1
 ENCODING = 'utf-8-sig'
 
 # Путь к обработке инструментов ИР
-IR_TOOLS_PATH = r"C:\ROOT\7_90.1\wp\Портативный.erf"
+IR_TOOLS_PATH = r"c:\ROOT\7.90.1\ирПортативный.epf"
+
