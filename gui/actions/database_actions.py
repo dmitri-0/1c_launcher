@@ -15,6 +15,8 @@ from pathlib import Path
 from datetime import datetime
 from PySide6.QtCore import QTimer
 
+from config import IR_TOOLS_PATH
+
 
 class DatabaseActions:
     """Класс для работы с действиями над базами данных 1С.
@@ -85,6 +87,24 @@ class DatabaseActions:
         else:
             self.window.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
             return False
+
+    def open_ir_tools(self, database):
+        """Открывает базу с запуском инструментов ИР (F5).
+
+        Используется толстый клиент и специальный набор параметров.
+        """
+        executable = self._get_1c_executable(database)
+        if not executable:
+            self.window.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
+            return False
+
+        if self._launch_1c_process(executable, "IR_TOOLS", database):
+            self._move_to_recent(database)
+            self._delayed_reload_after_launch()
+            return True
+        else:
+            self.window.statusBar.showMessage(f"❌ Ошибка при запуске инструментов ИР для {database.name}")
+            return False
     
     def _parse_server_connect_string(self, connect_string):
         """Парсит строку подключения серверной базы.
@@ -117,14 +137,14 @@ class DatabaseActions:
         
         Args:
             executable: Путь к исполняемому файлу 1С
-            mode: Режим запуска ('ENTERPRISE' или 'DESIGNER')
+            mode: Режим запуска ('ENTERPRISE', 'DESIGNER' или 'IR_TOOLS')
             database: Объект базы данных
             
         Returns:
             str: Командная строка для запуска или None при ошибке
         """
         try:
-            params = [mode]
+            params = [mode if mode != 'IR_TOOLS' else 'ENTERPRISE']
             
             if database.connect:
                 parsed_connect = self._parse_server_connect_string(database.connect)
@@ -134,7 +154,7 @@ class DatabaseActions:
             usr = None
             pwd = None
             
-            if mode == 'ENTERPRISE':
+            if mode == 'ENTERPRISE' or mode == 'IR_TOOLS':
                 usr = database.usr_enterprise or database.usr
                 pwd = database.pwd_enterprise or database.pwd
             elif mode == 'DESIGNER':
@@ -145,6 +165,16 @@ class DatabaseActions:
                 params.append(f'/N"{usr}"')
             if pwd:
                 params.append(f'/P"{pwd}"')
+
+            # Для запуска инструментов ИР добавляем специальные параметры
+            if mode == 'IR_TOOLS':
+                params.extend([
+                    '/RunModeOrdinaryApplication',
+                    '/Debug',
+                    '/UC""',
+                    f'/Execute"{IR_TOOLS_PATH}"',
+                    '/WA-'
+                ])
             
             cmd_line = f'"{executable}" ' + ' '.join(
                 f'"{p}"' if ' ' in p and not p.startswith('/') else p 
