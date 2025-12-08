@@ -28,6 +28,9 @@ class Database1C:
     pwd_storage: Optional[str] = None  # Пароль для Хранилища
     storage_path: Optional[str] = None  # Путь к хранилищу
     
+    # Тип клиента: 'thin' (тонкий, 1cv8c.exe) или 'thick' (толстый, 1cv8.exe)
+    client_type: Optional[str] = 'thick'  # По умолчанию толстый клиент
+    
     def __str__(self):
         return self.name
     
@@ -72,3 +75,9 @@ class Database1C:
         if self.is_recent:
             return "Недавние"
         return self.get_folder_path()
+    
+    def get_client_type_display(self) -> str:
+        """Возвращает отображаемое название типа клиента"""
+        if self.client_type == 'thin':
+            return 'Тонкий клиент'
+        return 'Толстый клиент'
