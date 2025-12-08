@@ -97,6 +97,9 @@ class BaseReader:
             except ValueError:
                 pass
         
+        # Читаем тип клиента (по умолчанию 'thick')
+        client_type = data.get('ClientType', 'thick')
+        
         return Database1C(
             id=data.get('ID', ''),
             name=data.get('SectionName', 'Без имени'),  # Имя из [секции]
@@ -119,6 +122,7 @@ class BaseReader:
             usr_storage=data.get('UsrStorage', None),
             pwd_storage=data.get('PwdStorage', None),
             storage_path=data.get('StoragePath', None),
+            client_type=client_type,  # Тип клиента
         )
     
     def print_bases_list(self, bases: List[Database1C]):
