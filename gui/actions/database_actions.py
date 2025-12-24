@@ -93,7 +93,7 @@ class DatabaseActions:
 
         Используется толстый клиент и специальный набор параметров.
         """
-        executable = self._get_1c_executable(database)
+        executable = self._get_1c_executable(database, mode='IR_TOOLS')
         if not executable:
             self.window.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
             return False
@@ -263,49 +263,53 @@ class DatabaseActions:
         """Перезагружает UI после запуска базы."""
         self.reload_callback()
     
-    def _get_1c_executable(self, database):
-        """Определяет путь к исполняемому файлу 1C с учетом разрядности и типа клиента.
+    def _get_1c_executable(self, database, mode=None):
+    """Определяет путь к исполняемому файлу 1C с учетом разрядности и типа клиента.
+    
+    Args:
+        database: База данных
+        mode: Режим запуска (ENTERPRISE, DESIGNER, CREATEINFOBASE и т.д.)
         
-        Args:
-            database: База данных
+    Returns:
+        Path: Путь к исполняемому файлу или None
+    """
+    bitness = database.app_arch or 'x86'
+    client_type = database.client_type or 'thick'
+    
+    # Определяем имя файла в зависимости от типа клиента
+    if client_type == 'thin':
+        exe_name = '1cv8c.exe'
+    else:
+        exe_name = '1cv8.exe'
+    
+    if mode == 'IR_TOOLS':
+        exe_name = '1cv8.exe'
+        
+    if database.app:
+        path = Path(database.app)
+        if path.exists():
+            return path
+    
+    if platform.system() == 'Windows':
+        if database.version:
+            version = database.version
+            if bitness == 'x86_64':
+                path = Path(rf"C:\Program Files\1cv8\{version}\bin\{exe_name}")
+            else:
+                path = Path(rf"C:\Program Files (x86)\1cv8\{version}\bin\{exe_name}")
             
-        Returns:
-            Path: Путь к исполняемому файлу или None
-        """
-        bitness = database.app_arch or 'x86'
-        client_type = database.client_type or 'thick'
-        
-        # Определяем имя файла в зависимости от типа клиента
-        if client_type == 'thin':
-            exe_name = '1cv8c.exe'
-        else:
-            exe_name = '1cv8.exe'
-        
-        if database.app:
-            path = Path(database.app)
             if path.exists():
                 return path
         
-        if platform.system() == 'Windows':
-            if database.version:
-                version = database.version
-                if bitness == 'x86_64':
-                    path = Path(rf"C:\Program Files\1cv8\{version}\bin\{exe_name}")
-                else:
-                    path = Path(rf"C:\Program Files (x86)\1cv8\{version}\bin\{exe_name}")
-                
+        # Проверяем общие пути (только для толстого клиента)
+        if client_type == 'thick':
+            common_paths = [
+                Path(r"C:\Program Files\1cv8\common\1cestart.exe"),
+                Path(r"C:\Program Files (x86)\1cv8\common\1cestart.exe"),
+            ]
+            
+            for path in common_paths:
                 if path.exists():
                     return path
-            
-            # Проверяем общие пути (только для толстого клиента)
-            if client_type == 'thick':
-                common_paths = [
-                    Path(r"C:\Program Files\1cv8\common\1cestart.exe"),
-                    Path(r"C:\Program Files (x86)\1cv8\common\1cestart.exe"),
-                ]
-                
-                for path in common_paths:
-                    if path.exists():
-                        return path
-        
-        return None
+    
+    return None
