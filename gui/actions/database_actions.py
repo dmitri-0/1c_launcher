@@ -170,10 +170,17 @@ class DatabaseActions:
             if mode == 'IR_TOOLS':
                 params.extend([
                     '/RunModeOrdinaryApplication',
-                    '/Debug',
+                    '/Debug -attach',
+                    '/DebuggerURL tcp://localhost',
                     '/UC""',
                     f'/Execute"{IR_TOOLS_PATH}"',
                     '/WA-'
+                ])
+            
+            if mode == 'ENTERPRISE':
+                params.extend([
+                    '/Debug -attach',
+                    '/DebuggerURL tcp://localhost'
                 ])
             
             cmd_line = f'"{executable}" ' + ' '.join(
