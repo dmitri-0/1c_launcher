@@ -122,6 +122,7 @@ class TreeWindow(QMainWindow):
             "F3": self.handle_f3_open,
             "F4": self.handle_f4_open,
             "F5": self.handle_f5_ir_tools,
+            "F6": self.handle_f6_server_console,
             "Return": self.handle_enter,
             "Ctrl+C": lambda: self.operations.copy_connection_string(self.operations.get_selected_database(self.model, self.tree)),
             "Ctrl+D": lambda: self.operations.duplicate_database(self.operations.get_selected_database(self.model, self.tree), Database1C),
@@ -165,6 +166,14 @@ class TreeWindow(QMainWindow):
         db = self.operations.get_selected_database(self.model, self.tree)
         if db:
             open_success = self.actions.open_ir_tools(db)
+            if open_success:
+                self.minimize_to_tray()
+
+    def handle_f6_server_console(self):
+        """Обработка F6: запуск консоли сервера 1С для выбранной базы."""
+        db = self.operations.get_selected_database(self.model, self.tree)
+        if db:
+            open_success = self.actions.open_server_console(db)
             if open_success:
                 self.minimize_to_tray()
 
@@ -262,7 +271,7 @@ class TreeWindow(QMainWindow):
         """Разворачивает нужные папки и устанавливает курсор."""
         opened_folder_idx = None
         recent_folder_idx = None
-        
+
         for folder_idx in range(self.model.rowCount()):
             folder_item = self.model.item(folder_idx, 0)
             if not folder_item:
@@ -271,7 +280,7 @@ class TreeWindow(QMainWindow):
                 opened_folder_idx = folder_idx
             elif "Недавние" in folder_item.text():
                 recent_folder_idx = folder_idx
-        
+
         if opened_folder_idx is not None:
             folder_item = self.model.item(opened_folder_idx, 0)
             folder_index = self.model.index(opened_folder_idx, 0)
@@ -291,7 +300,7 @@ class TreeWindow(QMainWindow):
                 self.tree.setCurrentIndex(first_proc_index)
                 self.tree.scrollTo(first_proc_index)
                 return
-        
+
         if recent_folder_idx is not None:
             folder_item = self.model.item(recent_folder_idx, 0)
             folder_index = self.model.index(recent_folder_idx, 0)
