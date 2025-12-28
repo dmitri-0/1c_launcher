@@ -10,6 +10,7 @@
 
 import os
 import re
+import sys
 import tempfile
 import platform
 import subprocess
@@ -18,6 +19,74 @@ from datetime import datetime
 from PySide6.QtCore import QTimer
 
 from config import IR_TOOLS_PATH
+
+
+# Fallback-текст PS1, если файл не найден (например, в собранном exe).
+# Важно: пишем во временный файл в кодировке utf-8-sig (с BOM), как у исходника.
+_PS1_START_1C_CONSOLE_FALLBACK = r'''﻿# Принимаем параметры из Python (или командной строки)
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$Ver,          # Например: "8.3.25.1234"
+
+    [Parameter(Mandatory=$true)]
+    [string]$IsX64String   # "true" или "false" (строкой надежнее при вызове извне)
+)
+
+# Преобразуем строку в boolean
+$IsX64 = [System.Convert]::ToBoolean($IsX64String)
+
+# --- Блок авто-повышения прав (Self-Elevation) ---
+$Id = [Security.Principal.WindowsIdentity]::GetCurrent()
+$Pr = [Security.Principal.WindowsPrincipal]$Id
+if (-not $Pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    # Формируем строку аргументов, чтобы передать их в новую админскую сессию
+    $NewArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`" -Ver `"$Ver`" -IsX64String `"$IsX64String`""
+    
+    Start-Process powershell -Verb RunAs -ArgumentList $NewArgs
+    Exit
+}
+
+# --- Основная логика ---
+try {
+    # 1. Определяем корневой путь и имя оснастки
+    if ($IsX64) {
+        $Root = $env:ProgramFiles
+        $MscName = "1CV8 Servers (x86-64).msc"
+        $ArchName = "x64"
+    } else {
+        $Root = ${env:ProgramFiles(x86)}
+        # Если запущено на 32-битной Windows, переменная (x86) пуста, берем просто ProgramFiles
+        if ([string]::IsNullOrEmpty($Root)) { $Root = $env:ProgramFiles }
+        $MscName = "1CV8 Servers.msc"
+        $ArchName = "x86"
+    }
+
+    $Dll = Join-Path $Root "1cv8\$Ver\bin\radmin.dll"
+
+    # 2. Ищем файл .msc (проверяем оба места, т.к. Common общий)
+    $MscPath1 = Join-Path $env:ProgramFiles "1cv8\common\$MscName"
+    $MscPath2 = Join-Path ${env:ProgramFiles(x86)} "1cv8\common\$MscName"
+
+    if (Test-Path $MscPath1) { $Msc = $MscPath1 }
+    elseif (Test-Path $MscPath2) { $Msc = $MscPath2 }
+    else { throw "Файл консоли '$MscName' не найден в папках common!" }
+
+    # 3. Регистрация
+    if (-not (Test-Path $Dll)) { throw "DLL не найдена: $Dll" }
+    
+    Write-Host "Версия: $Ver ($ArchName)" -ForegroundColor Yellow
+    Write-Host "Регистрация: $Dll" -ForegroundColor Cyan
+    Start-Process "regsvr32.exe" -ArgumentList "/s `"$Dll`"" -Wait
+
+    # 4. Запуск
+    Write-Host "Запуск: $Msc" -ForegroundColor Green
+    Start-Process "mmc.exe" -ArgumentList "`"$Msc`""
+
+} catch {
+    Write-Error $_.Exception.Message
+    Read-Host "Нажмите Enter для выхода..."
+}
+'''
 
 
 class DatabaseActions:
@@ -32,29 +101,18 @@ class DatabaseActions:
     """
 
     def __init__(self, window, all_bases, save_callback, reload_callback):
-        """Инициализация менеджера действий.
-
-        Args:
-            window: Объект главного окна
-            all_bases: Список всех баз данных
-            save_callback: Функция для сохранения баз
-            reload_callback: Функция для перезагрузки UI
-        """
+        """Инициализация менеджера действий."""
         self.window = window
         self.all_bases = all_bases
         self.last_launched_db = None
         self.save_callback = save_callback
         self.reload_callback = reload_callback
 
+        # Чтобы не создавать временный ps1 при каждом запуске.
+        self._temp_console_ps1_path = None
+
     def open_database(self, database):
-        """Открывает базу в режиме предприятия.
-
-        Args:
-            database: Объект базы данных
-
-        Returns:
-            bool: True если запуск успешен
-        """
+        """Открывает базу в режиме предприятия."""
         executable = self._get_1c_executable(database)
         if not executable:
             self.window.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
@@ -69,14 +127,7 @@ class DatabaseActions:
             return False
 
     def open_configurator(self, database):
-        """Открывает базу в режиме конфигуратора.
-
-        Args:
-            database: Объект базы данных
-
-        Returns:
-            bool: True если запуск успешен
-        """
+        """Открывает базу в режиме конфигуратора."""
         executable = self._get_1c_executable(database, mode='DESIGNER')
         if not executable:
             self.window.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
@@ -91,10 +142,7 @@ class DatabaseActions:
             return False
 
     def open_ir_tools(self, database):
-        """Открывает базу с запуском инструментов ИР (F5).
-
-        Используется толстый клиент и специальный набор параметров.
-        """
+        """Открывает базу с запуском инструментов ИР (F5)."""
         executable = self._get_1c_executable(database, mode='IR_TOOLS')
         if not executable:
             self.window.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
@@ -109,16 +157,7 @@ class DatabaseActions:
             return False
 
     def open_server_console(self, database):
-        """Запускает консоль сервера 1С (MMC оснастка) для версии базы.
-
-        Для запуска используется PowerShell-скрипт gui/actions/Start-1C-Console.ps1,
-        которому передаются:
-        - -Ver: версия платформы (например, 8.3.23.2040)
-        - -IsX64String: "true"/"false" (строка)
-
-        Returns:
-            bool: True если команда сформирована и процесс запуска инициирован.
-        """
+        """Запускает консоль сервера 1С (MMC оснастка) для версии базы."""
         if not database:
             self.window.statusBar.showMessage("❌ База не выбрана")
             return False
@@ -132,14 +171,13 @@ class DatabaseActions:
             self.window.statusBar.showMessage("❌ У базы не указана версия платформы (Version=...)")
             return False
 
-        # В проекте разрядность хранится как AppArch; в _get_1c_executable проверяется x86_64
         app_arch = (database.app_arch or '').lower().strip()
         is_x64 = app_arch in {"x86_64", "x64", "amd64"}
         x64_str = "true" if is_x64 else "false"
 
-        script_path = Path(__file__).resolve().parent / "Start-1C-Console.ps1"
-        if not script_path.exists():
-            self.window.statusBar.showMessage(f"❌ Не найден скрипт: {script_path}")
+        script_path = self._ensure_console_ps1()
+        if not script_path:
+            self.window.statusBar.showMessage("❌ Не удалось подготовить Start-1C-Console.ps1")
             return False
 
         cmd = [
@@ -164,17 +202,74 @@ class DatabaseActions:
             self.window.statusBar.showMessage(f"❌ Ошибка запуска консоли сервера 1С: {e}")
             return False
 
+    def _console_ps1_candidates(self):
+        """Возвращает список возможных путей к Start-1C-Console.ps1."""
+        candidates = []
+
+        # 1) Обычный запуск из исходников: рядом с database_actions.py
+        candidates.append(Path(__file__).resolve().parent / "Start-1C-Console.ps1")
+
+        # 2) Если пользователь запускает из корня проекта и ps1 лежит в текущей папке
+        candidates.append(Path.cwd() / "Start-1C-Console.ps1")
+        candidates.append(Path.cwd() / "gui" / "actions" / "Start-1C-Console.ps1")
+
+        # 3) PyInstaller: временная папка распаковки onefile / папка bundle
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            base = Path(meipass)
+            candidates.append(base / "Start-1C-Console.ps1")
+            candidates.append(base / "gui" / "actions" / "Start-1C-Console.ps1")
+
+        # 4) Рядом с exe (частый сценарий для onedir или ручного копирования ps1 рядом)
+        try:
+            exe_dir = Path(sys.executable).resolve().parent
+            candidates.append(exe_dir / "Start-1C-Console.ps1")
+            candidates.append(exe_dir / "gui" / "actions" / "Start-1C-Console.ps1")
+        except Exception:
+            pass
+
+        # Убираем дубли, сохраняя порядок
+        uniq = []
+        seen = set()
+        for p in candidates:
+            ps = str(p)
+            if ps not in seen:
+                uniq.append(p)
+                seen.add(ps)
+        return uniq
+
+    def _ensure_console_ps1(self) -> Path | None:
+        """Гарантирует наличие ps1: ищет, иначе создаёт временный файл."""
+        # Если уже создавали — переиспользуем
+        if self._temp_console_ps1_path:
+            try:
+                p = Path(self._temp_console_ps1_path)
+                if p.exists():
+                    return p
+            except Exception:
+                self._temp_console_ps1_path = None
+
+        for candidate in self._console_ps1_candidates():
+            if candidate.exists():
+                return candidate
+
+        # Файл не найден (типично: забыли добавить data files при сборке) — создаём во временной папке.
+        try:
+            fd, tmp_path = tempfile.mkstemp(prefix="Start-1C-Console-", suffix=".ps1", text=True)
+            os.close(fd)
+            tmp = Path(tmp_path)
+
+            # utf-8-sig важен, потому что исходный файл в репозитории с BOM.
+            tmp.write_text(_PS1_START_1C_CONSOLE_FALLBACK, encoding="utf-8-sig")
+
+            self._temp_console_ps1_path = str(tmp)
+            return tmp
+        except Exception as e:
+            self.window.statusBar.showMessage(f"❌ Не удалось создать временный PS1: {e}")
+            return None
+
     def _parse_server_connect_string(self, connect_string):
-        """Парсит строку подключения серверной базы.
-
-        Преобразует формат вида Srvr="server";Ref="base" в server\\base
-
-        Args:
-            connect_string: Строка подключения
-
-        Returns:
-            str: Преобразованная строка подключения
-        """
+        """Парсит строку подключения серверной базы."""
         try:
             srvr_match = re.search(r'Srvr="([^"]+)"', connect_string, re.IGNORECASE)
             ref_match = re.search(r'Ref="([^"]+)"', connect_string, re.IGNORECASE)
@@ -191,16 +286,7 @@ class DatabaseActions:
             return connect_string
 
     def _build_launch_command(self, executable, mode, database):
-        """Формирует командную строку для запуска 1С.
-
-        Args:
-            executable: Путь к исполняемому файлу 1С
-            mode: Режим запуска ('ENTERPRISE', 'DESIGNER' или 'IR_TOOLS')
-            database: Объект базы данных
-
-        Returns:
-            str: Командная строка для запуска или None при ошибке
-        """
+        """Формирует командную строку для запуска 1С."""
         try:
             params = [mode if mode != 'IR_TOOLS' else 'ENTERPRISE']
 
@@ -208,7 +294,6 @@ class DatabaseActions:
                 parsed_connect = self._parse_server_connect_string(database.connect)
                 params.append(f'/S"{parsed_connect}"')
 
-            # Используем учетные данные в зависимости от режима
             usr = None
             pwd = None
 
@@ -224,7 +309,6 @@ class DatabaseActions:
             if pwd:
                 params.append(f'/P"{pwd}"')
 
-            # Для запуска инструментов ИР добавляем специальные параметры
             if mode == 'IR_TOOLS':
                 params.extend([
                     '/RunModeOrdinaryApplication',
@@ -253,16 +337,7 @@ class DatabaseActions:
             return None
 
     def _launch_1c_process(self, executable, mode, database):
-        """Запускает процесс 1С через временный BAT-файл.
-
-        Args:
-            executable: Путь к исполняемому файлу
-            mode: Режим запуска
-            database: База данных
-
-        Returns:
-            bool: True если запуск успешен
-        """
+        """Запускает процесс 1С через временный BAT-файл."""
         try:
             cmd_line = self._build_launch_command(executable, mode, database)
 
@@ -294,11 +369,7 @@ class DatabaseActions:
             return False
 
     def _cleanup_temp_file(self, filepath):
-        """Удаляет временный файл.
-
-        Args:
-            filepath: Путь к файлу
-        """
+        """Удаляет временный файл."""
         try:
             if os.path.exists(filepath):
                 os.remove(filepath)
@@ -306,11 +377,7 @@ class DatabaseActions:
             pass
 
     def _move_to_recent(self, database):
-        """Помечает базу как недавнюю и перемещает в начало списка.
-
-        Args:
-            database: База данных
-        """
+        """Помечает базу как недавнюю и перемещает в начало списка."""
         if not database.is_recent and not database.original_folder:
             database.original_folder = database.folder
 
@@ -329,19 +396,10 @@ class DatabaseActions:
         self.reload_callback()
 
     def _get_1c_executable(self, database, mode=None):
-        """Определяет путь к исполняемому файлу 1C с учетом разрядности и типа клиента.
-
-        Args:
-            database: База данных
-            mode: Режим запуска (ENTERPRISE, DESIGNER, CREATEINFOBASE и т.д.)
-
-        Returns:
-            Path: Путь к исполняемому файлу или None
-        """
+        """Определяет путь к исполняемому файлу 1C с учетом разрядности и типа клиента."""
         bitness = database.app_arch or 'x86'
         client_type = database.client_type or 'thick'
 
-        # Определяем имя файла в зависимости от типа клиента
         if client_type == 'thin':
             exe_name = '1cv8c.exe'
         else:
@@ -366,7 +424,6 @@ class DatabaseActions:
                 if path.exists():
                     return path
 
-            # Проверяем общие пути (только для толстого клиента)
             if client_type == 'thick':
                 common_paths = [
                     Path(r"C:\Program Files\1cv8\common\1cestart.exe"),
