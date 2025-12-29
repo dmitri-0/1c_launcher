@@ -172,7 +172,7 @@ class DatabaseActions:
                 mode='w',
                 suffix='.bat',
                 delete=False,
-                encoding='utf-8-sig'
+                encoding='utf-8'
             ) as bat_file:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
@@ -222,7 +222,7 @@ class DatabaseActions:
                 mode='w',
                 suffix='.bat',
                 delete=False,
-                encoding='utf-8-sig'
+                encoding='utf-8'
             ) as bat_file:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
@@ -270,7 +270,7 @@ class DatabaseActions:
                 mode='w',
                 suffix='.bat',
                 delete=False,
-                encoding='utf-8-sig'
+                encoding='utf-8'
             ) as bat_file:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
@@ -322,7 +322,7 @@ class DatabaseActions:
                 mode='w',
                 suffix='.bat',
                 delete=False,
-                encoding='utf-8-sig'
+                encoding='utf-8'
             ) as bat_file:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
