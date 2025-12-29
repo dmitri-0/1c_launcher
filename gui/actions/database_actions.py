@@ -492,12 +492,16 @@ class DatabaseActions:
         return None
 
     def _build_cf_dump_path(self, database) -> Path:
-        """Формирует путь к .cf для выгрузки."""
+        """Формирует путь к .cf для выгрузки в формате <ИМЯ_БАЗЫ>_<YYMMDD>_<HHMM>.cf"""
         base_name = (database.name or "database").strip()
         safe = self._sanitize_filename(base_name)
         if not safe:
             safe = "database"
-        return Path(CF_DUMP_PATH) / f"{safe}.cf"
+
+        now = datetime.now()
+        timestamp = now.strftime("%y%m%d_%H%M")
+
+        return Path(CF_DUMP_PATH) / f"{safe}_{timestamp}.cf"
 
     def _sanitize_filename(self, value: str) -> str:
         # Windows: запрещены <>:"/\\|?* и управляющие символы
