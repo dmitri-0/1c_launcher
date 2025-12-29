@@ -23,7 +23,7 @@ from config import IR_TOOLS_PATH, CF_DUMP_PATH, LOG_PATH
 
 # Fallback-текст PS1, если файл не найден (например, в собранном exe).
 # Важно: пишем во временный файл в кодировке utf-8-sig (с BOM), как у исходника.
-_PS1_START_1C_CONSOLE_FALLBACK = r'''﻿# Принимаем параметры из Python (или командной строки)
+_PS1_START_1C_CONSOLE_FALLBACK = r'''# Принимаем параметры из Python (или командной строки)
 param(
     [Parameter(Mandatory=$true)]
     [string]$Ver,          # Например: "8.3.25.1234"
@@ -454,11 +454,12 @@ class DatabaseActions:
 
         # Файл не найден (типично: забыли добавить data files при сборке) — создаём во временный файл.
         try:
-            fd, tmp_path = tempfile.mkstemp(prefix="Start-1C-Console-", suffix=".ps1", text=True)
+            # Создаём файл БЕЗ text=True, чтобы избежать конфликта кодировок
+            fd, tmp_path = tempfile.mkstemp(prefix="Start-1C-Console-", suffix=".ps1")
             os.close(fd)
             tmp = Path(tmp_path)
 
-            # utf-8-sig важен, потому что исходный файл в репозитории с BOM.
+            # Записываем с явным указанием utf-8-sig (BOM важен для PowerShell)
             tmp.write_text(_PS1_START_1C_CONSOLE_FALLBACK, encoding="utf-8-sig")
 
             self._temp_console_ps1_path = str(tmp)
