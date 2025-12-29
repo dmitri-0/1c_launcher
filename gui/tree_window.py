@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QStatusBar, QMessageBox, QSystemTrayIcon, QMenu, QStyle, QApplication
 )
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QIcon, QAction
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QProcess
 from services.base_reader import BaseReader
 from services.process_manager import ProcessManager, Process1C
 from config import IBASES_PATH, ENCODING
@@ -14,8 +14,10 @@ from gui.hotkeys import GlobalHotkeyManager
 from gui.actions import DatabaseActions, DatabaseOperations, ProcessActions
 from gui.tree import TreeBuilder, OpenedBasesTreeBuilder
 
+
 class TreeWindow(QMainWindow):
     """Основное окно с деревом баз 1С и управлением процессами."""
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Базы 1С")
@@ -46,6 +48,9 @@ class TreeWindow(QMainWindow):
         self.last_launched_db = None
         self.last_activated_process = None  # Последний активированный процесс 1C
 
+        # Процесс блокнота для редактирования ibases.v8i
+        self._ibases_editor_process = None
+
         # Настройка трея
         self.setup_tray_icon()
 
@@ -73,6 +78,11 @@ class TreeWindow(QMainWindow):
         show_action = QAction("Показать", self)
         show_action.triggered.connect(self.show_from_tray)
         tray_menu.addAction(show_action)
+
+        edit_ibases_action = QAction("Редактировать ibases.v8i", self)
+        edit_ibases_action.triggered.connect(self.edit_ibases_in_notepad)
+        tray_menu.addAction(edit_ibases_action)
+
         quit_action = QAction("Выход", self)
         quit_action.triggered.connect(self.quit_application)
         tray_menu.addAction(quit_action)
@@ -130,6 +140,7 @@ class TreeWindow(QMainWindow):
             "Ctrl+C": lambda: self.operations.copy_connection_string(self.operations.get_selected_database(self.model, self.tree)),
             "Ctrl+D": lambda: self.operations.duplicate_database(self.operations.get_selected_database(self.model, self.tree), Database1C),
             "Ctrl+E": lambda: self.operations.edit_database_settings(self.operations.get_selected_database(self.model, self.tree), DatabaseSettingsDialog),
+            "Ctrl+I": self.edit_ibases_in_notepad,
             "Del": self.handle_delete,
             "Shift+Del": self.handle_shift_delete,
             "Shift+F10": lambda: self.operations.add_database(Database1C, DatabaseSettingsDialog, lambda: self.operations.get_current_folder(self.model, self.tree)),
@@ -139,6 +150,51 @@ class TreeWindow(QMainWindow):
         for key, handler in shortcuts.items():
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(handler)
+
+    def edit_ibases_in_notepad(self):
+        """Открыть ibases.v8i в Notepad и после закрытия перечитать дерево."""
+        if self._ibases_editor_process and self._ibases_editor_process.state() != QProcess.NotRunning:
+            self.statusBar.showMessage("⚠️ ibases.v8i уже открыт в редакторе", 4000)
+            return
+
+        if not IBASES_PATH.exists():
+            QMessageBox.warning(
+                self,
+                "Файл не найден",
+                f"Не найден файл ibases.v8i по пути:\n{IBASES_PATH}"
+            )
+            return
+
+        proc = QProcess(self)
+        proc.setProgram("notepad.exe")
+        proc.setArguments([str(IBASES_PATH)])
+        proc.finished.connect(self._on_ibases_editor_closed)
+        proc.errorOccurred.connect(self._on_ibases_editor_error)
+
+        proc.start()
+        if not proc.waitForStarted(2000):
+            QMessageBox.warning(
+                self,
+                "Ошибка запуска",
+                "Не удалось запустить notepad.exe для редактирования ibases.v8i"
+            )
+            return
+
+        self._ibases_editor_process = proc
+        self.statusBar.showMessage("📝 Открыт ibases.v8i в Notepad (Ctrl+I)", 4000)
+
+    def _on_ibases_editor_closed(self, exitCode, exitStatus):
+        self._ibases_editor_process = None
+        self.reload_and_navigate()
+        self.statusBar.showMessage("✅ ibases.v8i закрыт — дерево обновлено", 5000)
+
+    def _on_ibases_editor_error(self, error):
+        self._ibases_editor_process = None
+        QMessageBox.warning(
+            self,
+            "Ошибка запуска",
+            "Не удалось открыть ibases.v8i в Notepad"
+        )
 
     def handle_enter(self):
         """Обработка Enter: активация процесса или открытие базы."""
