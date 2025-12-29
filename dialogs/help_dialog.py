@@ -48,7 +48,7 @@ class HelpDialog(QDialog):
             </tr>
             <tr>
                 <td><span class="key">F3</span></td>
-                <td>Открыть выбранную базу данных (режим предприятия) и свернуть окно в трей</td>
+                <td>Открыть выбранную базу данных (режим предприятия) с попыткой отладки (/debug -attach) и свернуть окно в трей</td>
             </tr>
             <tr>
                 <td><span class="key">F4</span></td>
@@ -56,7 +56,7 @@ class HelpDialog(QDialog):
             </tr>
             <tr>
                 <td><span class="key">F5</span></td>
-                <td>Запустить инструменты ИР (Inspection & Repair Tools) для выбранной базы и свернуть окно в трей</td>
+                <td>Запустить инструменты ИР (Inspection & Repair Tools) для выбранной базы с попыткой отладки (/debug -attach) и свернуть окно в трей</td>
             </tr>
             <tr>
                 <td><span class="key">F6</span></td>
