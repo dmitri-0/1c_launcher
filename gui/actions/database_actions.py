@@ -627,8 +627,8 @@ class DatabaseActions:
         credentials = self._build_credentials_for_bat(database)
 
         bat = []
-        bat.append('chcp 65001 >nul')
         bat.append('@echo off')
+        bat.append('chcp 65001 >nul')
         bat.append(f'set PLATFORM="{executable}"')
         bat.append(f'set BASE={base_param}')
         bat.append(f'set LOG="{log_file}"')
@@ -653,8 +653,8 @@ class DatabaseActions:
         credentials = self._build_credentials_for_bat(database)
 
         bat = []
-        bat.append('chcp 65001 >nul')
         bat.append('@echo off')
+        bat.append('chcp 65001 >nul')
         bat.append(f'set PLATFORM="{executable}"')
         bat.append(f'set BASE={base_param}')
         bat.append(f'set LOG="{log_file}"')
