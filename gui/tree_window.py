@@ -123,7 +123,8 @@ class TreeWindow(QMainWindow):
             "F4": self.handle_f4_open,
             "F5": self.handle_f5_ir_tools,
             "F6": self.handle_f6_server_console,
-            "F7": self.handle_f7_save_and_dump_cf,
+            "F7": self.handle_f7_save_cfg,
+            "F8": self.handle_f8_dump_cf,
             "Return": self.handle_enter,
             "Ctrl+C": lambda: self.operations.copy_connection_string(self.operations.get_selected_database(self.model, self.tree)),
             "Ctrl+D": lambda: self.operations.duplicate_database(self.operations.get_selected_database(self.model, self.tree), Database1C),
@@ -178,11 +179,17 @@ class TreeWindow(QMainWindow):
             if open_success:
                 self.minimize_to_tray()
 
-    def handle_f7_save_and_dump_cf(self):
-        """Обработка F7: обновление конфигурации БД и выгрузка CF для выбранной базы."""
+    def handle_f7_save_cfg(self):
+        """Обработка F7: обновление конфигурации БД (/UpdateDBCfg) для выбранной базы."""
         db = self.operations.get_selected_database(self.model, self.tree)
         if db:
-            self.actions.save_and_dump_cf(db)
+            self.actions.save_cfg(db)
+
+    def handle_f8_dump_cf(self):
+        """Обработка F8: выгрузка CF (/DumpCfg) для выбранной базы."""
+        db = self.operations.get_selected_database(self.model, self.tree)
+        if db:
+            self.actions.dump_cf(db)
 
     def handle_delete(self):
         """Обработка Del: закрытие процесса или удаление базы."""
