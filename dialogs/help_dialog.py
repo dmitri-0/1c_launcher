@@ -58,6 +58,30 @@ class HelpDialog(QDialog):
                 <td><span class="key">F5</span></td>
                 <td>Запустить инструменты ИР (Inspection & Repair Tools) для выбранной базы и свернуть окно в трей</td>
             </tr>
+            <tr>
+                <td><span class="key">F6</span></td>
+                <td>Запустить консоль сервера 1С для выбранной базы и свернуть окно в трей</td>
+            </tr>
+        </table>
+        
+        <h3>Работа с конфигурацией</h3>
+        <table>
+            <tr>
+                <th>Клавиша</th>
+                <th>Действие</th>
+            </tr>
+            <tr>
+                <td><span class="key">F7</span></td>
+                <td>Обновление конфигурации БД (/UpdateDBCfg) для выбранной базы</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+F7</span></td>
+                <td>Обновление конфигурации из хранилища и сохранение (/UpdateDBCfg)</td>
+            </tr>
+            <tr>
+                <td><span class="key">F8</span></td>
+                <td>Выгрузка CF (/DumpCfg) для выбранной базы</td>
+            </tr>
         </table>
         
         <h3>Управление базами</h3>
