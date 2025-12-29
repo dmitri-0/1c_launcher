@@ -532,8 +532,8 @@ class DatabaseActions:
 
         # В BAT задаём переменные уже с кавычками, чтобы дальше использовать /Out%LOG% и /DumpCfg%DUMP%
         bat = []
-        bat.append('chcp 65001 >nul')
         bat.append('@echo off')
+        bat.append('chcp 65001 >nul')
         bat.append(f'set PLATFORM="{executable}"')
         bat.append(f'set BASE={base_param}')
         bat.append(f'set LOG="{log_file}"')
