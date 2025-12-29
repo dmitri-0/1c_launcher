@@ -162,16 +162,18 @@ class DatabaseActions:
 
         try:
             dump_file = self._build_cf_dump_path(database)
-            log_file = self._build_action_log_path(dump_file, action_name="save_and_dump_cf")
-
+            
+            # Базовое имя лог-файла (без суффикса действия, т.к. действия будут разные)
+            # Внутри _build_save_and_dump_cf_bat мы сами добавим нужные суффиксы к базовому пути
+            # Здесь только подготовим директорию.
+            log_dir = Path(LOG_PATH).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
             dump_file.parent.mkdir(parents=True, exist_ok=True)
-            log_file.parent.mkdir(parents=True, exist_ok=True)
 
             bat_text = self._build_save_and_dump_cf_bat(
                 executable=Path(executable),
                 database=database,
-                dump_file=dump_file,
-                log_file=log_file,
+                dump_file=dump_file
             )
 
             with tempfile.NamedTemporaryFile(
@@ -186,7 +188,7 @@ class DatabaseActions:
             # Запускаем без блокировки GUI (в отдельном процессе cmd)
             subprocess.Popen(["cmd", "/c", bat_path], shell=False)
 
-            self.window.statusBar.showMessage(f"💾 Выгрузка CF запущена: {dump_file} (log: {log_file})")
+            self.window.statusBar.showMessage(f"💾 Выгрузка CF запущена: {dump_file}")
 
             # Убираем BAT позже (даём cmd время начать выполнение)
             QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
@@ -525,24 +527,30 @@ class DatabaseActions:
         value = re.sub(r'\s+', ' ', value)
         return value
 
-    def _build_save_and_dump_cf_bat(self, executable: Path, database, dump_file: Path, log_file: Path) -> str:
+    def _build_save_and_dump_cf_bat(self, executable: Path, database, dump_file: Path) -> str:
         """Генерирует BAT-скрипт по образцу из задачи."""
         base_param = self._build_base_param_for_bat(database)
         credentials = self._build_credentials_for_bat(database)
+        
+        # Получаем пути к разным лог-файлам для каждого действия
+        log_update = self._build_action_log_path(dump_file, "UpdateDBCfg")
+        log_dump = self._build_action_log_path(dump_file, "DumpCfg")
 
         # В BAT задаём переменные уже с кавычками, чтобы дальше использовать /Out%LOG% и /DumpCfg%DUMP%
         bat = []
-        bat.append('@echo off')
         bat.append('chcp 65001 >nul')
+        bat.append('@echo off')
         bat.append(f'set PLATFORM="{executable}"')
         bat.append(f'set BASE={base_param}')
-        bat.append(f'set LOG="{log_file}"')
+        # LOG переменная удалена, так как теперь используем разные лог-файлы
+        bat.append(f'set LOG_UPDATE="{log_update}"')
+        bat.append(f'set LOG_DUMP="{log_dump}"')
         bat.append(f'set DUMP="{dump_file}"')
         bat.append(f'set CREDENTIALS={credentials}')
         bat.append('')
 
         bat.append('echo Обновление конфигурации БД...')
-        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /UpdateDBCfg /Out%LOG%')
+        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /UpdateDBCfg /Out%LOG_UPDATE%')
         bat.append('if errorlevel 1 (')
         bat.append('    echo ОШИБКА при обновлении конфигурации!')
         bat.append('    exit /b 1')
@@ -550,7 +558,7 @@ class DatabaseActions:
         bat.append('')
 
         bat.append('echo Выгрузка конфигурации...')
-        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /DumpCfg%DUMP% /Out%LOG%')
+        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /DumpCfg%DUMP% /Out%LOG_DUMP%')
         bat.append('if errorlevel 1 (')
         bat.append('    echo ОШИБКА при выгрузке!')
         bat.append('    exit /b 1')
