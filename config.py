@@ -10,3 +10,8 @@ ENCODING = 'utf-8-sig'
 # Путь к обработке инструментов ИР
 IR_TOOLS_PATH = r"c:\ROOT\7.90.1\ирПортативный.epf"
 
+# Путь для выгрузки CF (папка)
+CF_DUMP_PATH = Path(r"D:\CF")
+
+# Путь к лог-файлу операций
+LOG_PATH = Path(r"D:\CF\log.txt")
