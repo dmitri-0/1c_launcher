@@ -193,14 +193,18 @@ StoragePath=tcp://storage-server:1542/config-storage
 ├── requirements-dev.txt   # Зависимости для разработки
 ├── pyproject.toml         # Конфигурация проекта
 ├── smoke_test.py          # Простейшая проверка запуска/импорта
-├── Git/                   # Служебные файлы
+├── Git/                   # Скрипты для работы с git и 1С
+│   ├── Git.ps1            # Основной скрипт PowerShell
+│   └── modules/           # Модули PowerShell
 ├── gui/
 │   ├── __init__.py
 │   └── tree_window.py     # Главное окно с деревом
 ├── models/
 │   └── database.py        # Модель базы данных 1С
 ├── services/
-│   └── base_reader.py     # Чтение ibases.v8i
+│   ├── base_launcher.py   # Логика запуска баз
+│   ├── base_reader.py     # Чтение ibases.v8i
+│   └── process_manager.py # Управление процессами 1С
 └── dialogs/
     ├── __init__.py
     ├── help_dialog.py     # Окно справки по горячим клавишам
