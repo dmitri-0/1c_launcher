@@ -56,7 +56,7 @@ class HelpDialog(QDialog):
             </tr>
             <tr>
                 <td><span class="key">F5</span></td>
-                <td>Запустить инструменты ИР (Inspection & Repair Tools) для выбранной базы с попыткой отладки (/debug -attach) и свернуть окно в трей</td>
+                <td>Запустить портативные инструменты разработчика (ИР) для выбранной базы с попыткой отладки (/debug -attach) и свернуть окно в трей</td>
             </tr>
             <tr>
                 <td><span class="key">F6</span></td>
