@@ -124,6 +124,7 @@ class TreeWindow(QMainWindow):
             "F5": self.handle_f5_ir_tools,
             "F6": self.handle_f6_server_console,
             "F7": self.handle_f7_save_cfg,
+            "Ctrl+F7": self.handle_ctrl_f7_update_cfg_from_repository,
             "F8": self.handle_f8_dump_cf,
             "Return": self.handle_enter,
             "Ctrl+C": lambda: self.operations.copy_connection_string(self.operations.get_selected_database(self.model, self.tree)),
@@ -184,6 +185,12 @@ class TreeWindow(QMainWindow):
         db = self.operations.get_selected_database(self.model, self.tree)
         if db:
             self.actions.save_cfg(db)
+
+    def handle_ctrl_f7_update_cfg_from_repository(self):
+        """Обработка Ctrl+F7: обновление конфигурации из хранилища и сохранение (/UpdateDBCfg)."""
+        db = self.operations.get_selected_database(self.model, self.tree)
+        if db:
+            self.actions.update_cfg_from_repository(db)
 
     def handle_f8_dump_cf(self):
         """Обработка F8: выгрузка CF (/DumpCfg) для выбранной базы."""

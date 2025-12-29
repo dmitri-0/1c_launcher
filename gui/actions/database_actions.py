@@ -187,6 +187,56 @@ class DatabaseActions:
             self.window.statusBar.showMessage(f"❌ Ошибка подготовки UpdateDBCfg: {e}")
             return False
 
+    def update_cfg_from_repository(self, database):
+        """Ctrl+F7: обновление конфигурации из хранилища и сохранение (Designer).
+
+        Делает ConfigurationRepositoryUpdateCfg и затем UpdateDBCfg в одном вызове,
+        как в предоставленном примере BAT.
+        """
+        if not database:
+            self.window.statusBar.showMessage("❌ База не выбрана")
+            return False
+
+        if platform.system() != 'Windows':
+            self.window.statusBar.showMessage("❌ Операция поддерживается только в Windows")
+            return False
+
+        executable = self._get_1c_executable(database, mode='DESIGNER')
+        if not executable:
+            self.window.statusBar.showMessage("❌ Не удалось найти 1cv8.exe для конфигуратора")
+            return False
+
+        try:
+            base_stem = self._build_base_stem(database)
+            log_file = self._build_action_log_path(base_stem, action_name="RepositoryUpdateCfg")
+
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+
+            bat_text = self._build_repo_update_cfg_bat(
+                executable=Path(executable),
+                database=database,
+                log_file=log_file,
+            )
+
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                suffix='.bat',
+                delete=False,
+                encoding='utf-8-sig'
+            ) as bat_file:
+                bat_file.write(bat_text)
+                bat_path = bat_file.name
+
+            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
+            self.window.statusBar.showMessage(f"📥 Обновление из хранилища запущено (log: {log_file})")
+
+            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            return True
+
+        except Exception as e:
+            self.window.statusBar.showMessage(f"❌ Ошибка подготовки RepositoryUpdateCfg: {e}")
+            return False
+
     def dump_cf(self, database):
         """F8: выгрузка конфигурации в CF (Designer /DumpCfg)."""
         if not database:
@@ -637,6 +687,37 @@ class DatabaseActions:
 
         bat.append('echo Обновление конфигурации БД...')
         bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /UpdateDBCfg /Out%LOG%')
+        bat.append('if errorlevel 1 (')
+        bat.append('    echo ОШИБКА при обновлении конфигурации!')
+        bat.append('    exit /b 1')
+        bat.append(')')
+        bat.append('')
+        bat.append('exit /b 0')
+        bat.append('')
+
+        return '\n'.join(bat)
+
+    def _build_repo_update_cfg_bat(self, executable: Path, database, log_file: Path) -> str:
+        """Генерирует BAT для обновления конфигурации из хранилища и сохранения.
+
+        Выполняет:
+        - /ConfigurationRepositoryUpdateCfg -v -1 -revised -force
+        - /UpdateDBCfg
+        """
+        base_param = self._build_base_param_for_bat(database)
+        credentials = self._build_credentials_for_bat(database)
+
+        bat = []
+        bat.append('@echo off')
+        bat.append('chcp 65001 >nul')
+        bat.append(f'set PLATFORM="{executable}"')
+        bat.append(f'set BASE={base_param}')
+        bat.append(f'set LOG="{log_file}"')
+        bat.append(f'set CREDENTIALS={credentials}')
+        bat.append('')
+
+        bat.append('echo Обновление конфигурации из хранилища...')
+        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /ConfigurationRepositoryUpdateCfg -v -1 -revised -force /UpdateDBCfg /Out%LOG%')
         bat.append('if errorlevel 1 (')
         bat.append('    echo ОШИБКА при обновлении конфигурации!')
         bat.append('    exit /b 1')
