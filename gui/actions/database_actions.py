@@ -162,7 +162,7 @@ class DatabaseActions:
 
         try:
             dump_file = self._build_cf_dump_path(database)
-            log_file = Path(LOG_PATH)
+            log_file = self._build_action_log_path(dump_file, action_name="save_and_dump_cf")
 
             dump_file.parent.mkdir(parents=True, exist_ok=True)
             log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -186,7 +186,7 @@ class DatabaseActions:
             # Запускаем без блокировки GUI (в отдельном процессе cmd)
             subprocess.Popen(["cmd", "/c", bat_path], shell=False)
 
-            self.window.statusBar.showMessage(f"💾 Выгрузка CF запущена: {dump_file}")
+            self.window.statusBar.showMessage(f"💾 Выгрузка CF запущена: {dump_file} (log: {log_file})")
 
             # Убираем BAT позже (даём cmd время начать выполнение)
             QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
@@ -502,6 +502,21 @@ class DatabaseActions:
         timestamp = now.strftime("%y%m%d_%H%M")
 
         return Path(CF_DUMP_PATH) / f"{safe}_{timestamp}.cf"
+
+    def _build_action_log_path(self, dump_file: Path, action_name: str) -> Path:
+        """Формирует имя лог-файла по шаблону CF + 'log' + имя действия.
+
+        Пример: <ИМЯ_БАЗЫ>_<YYMMDD>_<HHMM>_log_save_and_dump_cf.txt
+
+        Папку берём из LOG_PATH (если в конфиге указан файл, то используем его parent).
+        Расширение берём из LOG_PATH (если нет — .txt).
+        """
+        base = Path(LOG_PATH)
+        log_dir = base.parent if base.suffix else base
+        ext = base.suffix if base.suffix else ".txt"
+
+        safe_action = self._sanitize_filename(action_name) or "action"
+        return log_dir / f"{dump_file.stem}_log_{safe_action}{ext}"
 
     def _sanitize_filename(self, value: str) -> str:
         # Windows: запрещены <>:"/\\|?* и управляющие символы
