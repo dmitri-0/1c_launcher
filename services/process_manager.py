@@ -10,6 +10,7 @@ import psutil
 import win32gui
 import win32con
 import win32process
+import time
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -154,14 +155,26 @@ class ProcessManager:
                 proc.kill()
             else:
                 # Корректное закрытие через окно (WM_CLOSE)
-                try:
+                if win32gui.IsWindow(process.hwnd):
                     win32gui.PostMessage(process.hwnd, win32con.WM_CLOSE, 0, 0)
-                except Exception:
-                    # Если не удалось закрыть через окно, пробуем terminate
+                    
+                    # Ожидаем, пока окно не исчезнет из списка приложений (Task Manager Apps)
+                    # Это позволяет вернуть управление сразу, как только окно закрылось,
+                    # даже если процесс 1С еще висит в фоне.
+                    while win32gui.IsWindow(process.hwnd):
+                        time.sleep(0.1)
+                        # Защита от зависания: если процесс умер, прерываем цикл
+                        if not psutil.pid_exists(process.pid):
+                            break
+                else:
+                    # Если окна нет или оно недоступно, завершаем процесс
                     proc.terminate()
             
             return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            # Если процесса уже нет, считаем успешным закрытием
+            return True
+        except Exception as e:
             print(f"Ошибка закрытия процесса: {e}")
             return False
     

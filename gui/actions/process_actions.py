@@ -79,6 +79,7 @@ class ProcessActions:
             return
         
         action_name = "Снята задача" if force else "Закрыто"
+        activate_success = ProcessManager.activate_window(process)
         success = ProcessManager.close_process(process, force=force)
         
         if success:
@@ -86,7 +87,7 @@ class ProcessActions:
             
             # Обновляем список процессов с задержкой и восстанавливаем позицию
             # Для force=True - 100мс, для корректного закрытия - 500мс (даём время на завершение)
-            delay = 100 if force else 500
+            delay = 10 if force else 10
             QTimer.singleShot(delay, self.window.refresh_opened_bases)
         else:
             self.window.statusBar.showMessage(f"❌ Не удалось закрыть: {process.name}", 3000)
