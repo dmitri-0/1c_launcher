@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime
 from PySide6.QtCore import QTimer
 
-from config import IR_TOOLS_PATH
+from config import IR_TOOLS_PATH, CF_DUMP_PATH, LOG_PATH
 
 
 # Fallback-текст PS1, если файл не найден (например, в собранном exe).
@@ -139,6 +139,61 @@ class DatabaseActions:
             return True
         else:
             self.window.statusBar.showMessage(f"❌ Ошибка при запуске конфигуратора для {database.name}")
+            return False
+
+    def save_and_dump_cf(self, database):
+        """Обновление конфигурации БД и выгрузка конфигурации в CF (Designer).
+
+        Создаёт BAT по образцу (chcp 65001, set PLATFORM/BASE/LOG/DUMP/CREDENTIALS),
+        затем запускает его через cmd.exe.
+        """
+        if not database:
+            self.window.statusBar.showMessage("❌ База не выбрана")
+            return False
+
+        if platform.system() != 'Windows':
+            self.window.statusBar.showMessage("❌ Выгрузка CF поддерживается только в Windows")
+            return False
+
+        executable = self._get_1c_executable(database, mode='DESIGNER')
+        if not executable:
+            self.window.statusBar.showMessage("❌ Не удалось найти 1cv8.exe для конфигуратора")
+            return False
+
+        try:
+            dump_file = self._build_cf_dump_path(database)
+            log_file = Path(LOG_PATH)
+
+            dump_file.parent.mkdir(parents=True, exist_ok=True)
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+
+            bat_text = self._build_save_and_dump_cf_bat(
+                executable=Path(executable),
+                database=database,
+                dump_file=dump_file,
+                log_file=log_file,
+            )
+
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                suffix='.bat',
+                delete=False,
+                encoding='utf-8-sig'
+            ) as bat_file:
+                bat_file.write(bat_text)
+                bat_path = bat_file.name
+
+            # Запускаем без блокировки GUI (в отдельном процессе cmd)
+            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
+
+            self.window.statusBar.showMessage(f"💾 Выгрузка CF запущена: {dump_file}")
+
+            # Убираем BAT позже (даём cmd время начать выполнение)
+            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            return True
+
+        except Exception as e:
+            self.window.statusBar.showMessage(f"❌ Ошибка подготовки выгрузки CF: {e}")
             return False
 
     def open_ir_tools(self, database):
@@ -435,3 +490,76 @@ class DatabaseActions:
                         return path
 
         return None
+
+    def _build_cf_dump_path(self, database) -> Path:
+        """Формирует путь к .cf для выгрузки."""
+        base_name = (database.name or "database").strip()
+        safe = self._sanitize_filename(base_name)
+        if not safe:
+            safe = "database"
+        return Path(CF_DUMP_PATH) / f"{safe}.cf"
+
+    def _sanitize_filename(self, value: str) -> str:
+        # Windows: запрещены <>:"/\\|?* и управляющие символы
+        value = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_', value)
+        value = value.strip().strip('.')
+        value = re.sub(r'\s+', ' ', value)
+        return value
+
+    def _build_save_and_dump_cf_bat(self, executable: Path, database, dump_file: Path, log_file: Path) -> str:
+        """Генерирует BAT-скрипт по образцу из задачи."""
+        base_param = self._build_base_param_for_bat(database)
+        credentials = self._build_credentials_for_bat(database)
+
+        # В BAT задаём переменные уже с кавычками, чтобы дальше использовать /Out%LOG% и /DumpCfg%DUMP%
+        bat = []
+        bat.append('chcp 65001 >nul')
+        bat.append('@echo off')
+        bat.append(f'set PLATFORM="{executable}"')
+        bat.append(f'set BASE={base_param}')
+        bat.append(f'set LOG="{log_file}"')
+        bat.append(f'set DUMP="{dump_file}"')
+        bat.append(f'set CREDENTIALS={credentials}')
+        bat.append('')
+
+        bat.append('echo Обновление конфигурации БД...')
+        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /UpdateDBCfg /Out%LOG%')
+        bat.append('if errorlevel 1 (')
+        bat.append('    echo ОШИБКА при обновлении конфигурации!')
+        bat.append('    exit /b 1')
+        bat.append(')')
+        bat.append('')
+
+        bat.append('echo Выгрузка конфигурации...')
+        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /DumpCfg%DUMP% /Out%LOG%')
+        bat.append('if errorlevel 1 (')
+        bat.append('    echo ОШИБКА при выгрузке!')
+        bat.append('    exit /b 1')
+        bat.append(')')
+        bat.append('')
+        bat.append('exit /b 0')
+        bat.append('')
+
+        return '\n'.join(bat)
+
+    def _build_base_param_for_bat(self, database) -> str:
+        """Возвращает значение для переменной BASE в BAT (включая /S"..." если возможно)."""
+        connect = (database.connect or '').strip()
+        if not connect:
+            return ''
+
+        parsed = self._parse_server_connect_string(connect)
+        return f'/S"{parsed}"'
+
+    def _build_credentials_for_bat(self, database) -> str:
+        """Возвращает значение для переменной CREDENTIALS в BAT."""
+        usr = database.usr_configurator or database.usr
+        pwd = database.pwd_configurator or database.pwd
+
+        parts = []
+        if usr:
+            parts.append(f'/N"{usr}"')
+        if pwd:
+            parts.append(f'/P"{pwd}"')
+
+        return ' '.join(parts)
