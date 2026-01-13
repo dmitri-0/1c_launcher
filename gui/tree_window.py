@@ -13,6 +13,7 @@ from models.database import Database1C
 from gui.hotkeys import GlobalHotkeyManager
 from gui.actions import DatabaseActions, DatabaseOperations, ProcessActions
 from gui.tree import TreeBuilder, OpenedBasesTreeBuilder
+from gui.theme import ThemeManager
 
 
 class TreeWindow(QMainWindow):
@@ -145,11 +146,18 @@ class TreeWindow(QMainWindow):
             "Shift+Del": self.handle_shift_delete,
             "Shift+F10": lambda: self.operations.add_database(Database1C, DatabaseSettingsDialog, lambda: self.operations.get_current_folder(self.model, self.tree)),
             "Esc": self.minimize_to_tray,
-            "Shift+Esc": self.quit_application
+            "Shift+Esc": self.quit_application,
+            "F10": self.toggle_theme
         }
         for key, handler in shortcuts.items():
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(handler)
+            
+    def toggle_theme(self):
+        """Переключение темы приложения (светлая/темная)."""
+        ThemeManager.toggle_theme(QApplication.instance())
+        status = "Темная" if ThemeManager.is_dark() else "Светлая"
+        self.statusBar.showMessage(f"🎨 Тема переключена: {status}", 2000)
 
     def edit_ibases_in_notepad(self):
         """Открыть ibases.v8i в Notepad и после закрытия перечитать дерево."""
