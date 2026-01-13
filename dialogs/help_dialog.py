@@ -2,6 +2,7 @@
 
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QPushButton
 from PySide6.QtCore import Qt
+from gui.theme import ThemeManager
 
 
 class HelpDialog(QDialog):
@@ -22,16 +23,11 @@ class HelpDialog(QDialog):
         # Текстовое поле с подсказками
         help_text = QTextEdit()
         help_text.setReadOnly(True)
-        help_text.setHtml("""
-        <style>
-            table { width: 100%; border-collapse: collapse; }
-            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-            th { background-color: #f2f2f2; font-weight: bold; }
-            tr:hover { background-color: #f5f5f5; }
-            .key { font-weight: bold; color: #0066cc; }
-            .section { background-color: #e8f4f8; font-weight: bold; padding: 8px; }
-        </style>
         
+        # Получаем стили из ThemeManager в зависимости от текущей темы
+        css_style = ThemeManager.get_help_css()
+        
+        help_text.setHtml(css_style + """
         <h3>Основные действия</h3>
         <table>
             <tr>
@@ -115,6 +111,10 @@ class HelpDialog(QDialog):
                 <td><span class="key">Shift+Del</span></td>
                 <td><b>Для баз:</b> Очистить программный и пользовательский кэш выбранной базы<br>
                     <b>Для процессов:</b> Принудительно завершить выбранный процесс 1С</td>
+            </tr>
+            <tr>
+                <td><span class="key">F10</span></td>
+                <td>Переключение темы оформления (светлая/темная)</td>
             </tr>
         </table>
         
