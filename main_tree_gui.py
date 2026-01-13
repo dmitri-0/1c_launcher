@@ -1,8 +1,10 @@
 import sys
 import os
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 from gui.tree_window import TreeWindow
+from gui.theme import ThemeManager
 
 def get_icon_path():
     """Получить путь к иконке приложения.
@@ -25,6 +27,9 @@ def main():
     icon_path = get_icon_path()
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
+
+    # Применение темной темы по умолчанию
+    ThemeManager.apply_theme(app, dark=True)
     
     window = TreeWindow()
     window.show()
