@@ -1,12 +1,14 @@
+import os
 from PySide6.QtWidgets import (
     QMainWindow, QTreeView, QVBoxLayout, QWidget,
-    QStatusBar, QMessageBox, QSystemTrayIcon, QMenu, QStyle, QApplication
+    QStatusBar, QMessageBox, QSystemTrayIcon, QMenu, QStyle, QApplication,
+    QPushButton, QHBoxLayout
 )
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QIcon, QAction
-from PySide6.QtCore import Qt, QProcess
+from PySide6.QtCore import Qt, QProcess, QProcessEnvironment
 from services.base_reader import BaseReader
 from services.process_manager import ProcessManager, Process1C
-from config import IBASES_PATH, ENCODING
+from config import IBASES_PATH, ENCODING, DBM_PYTHON_EXE, DBM_SCRIPT_PATH
 from dialogs import HelpDialog, DatabaseSettingsDialog
 from models.database import Database1C
 
@@ -26,6 +28,31 @@ class TreeWindow(QMainWindow):
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
 
+        # --- Кнопка DBM ---
+        self.btn_dbm = QPushButton("DBM")
+        self.btn_dbm.setToolTip("Запустить DBM API")
+        self.btn_dbm.setFixedSize(60, 25)
+        # Стиль для аккуратного вида (можно убрать, если используется глобальная тема)
+        self.btn_dbm.setStyleSheet("""
+            QPushButton {
+                background-color: #5c5c5c;
+                color: white;
+                border-radius: 3px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #6d6d6d; }
+            QPushButton:pressed { background-color: #4a4a4a; }
+        """)
+        self.btn_dbm.clicked.connect(self.run_dbm_app)
+
+        # Верхняя панель для кнопки (прижата вправо)
+        top_layout = QHBoxLayout()
+        top_layout.addStretch()
+        top_layout.addWidget(self.btn_dbm)
+        top_layout.setContentsMargins(0, 5, 10, 0)
+        # ------------------
+
         # Модель и дерево
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels([
@@ -38,8 +65,12 @@ class TreeWindow(QMainWindow):
         self.tree.setColumnWidth(0, 350)
         self.tree.setColumnWidth(1, 450)
         self.tree.setColumnWidth(2, 60)
+        
+        # Сборка основного лейаута
         layout = QVBoxLayout()
+        layout.addLayout(top_layout) # Добавляем верхнюю панель
         layout.addWidget(self.tree)
+        
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
@@ -169,7 +200,7 @@ class TreeWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Файл не найден",
-                f"Не найден файл ibases.v8i по пути:\n{IBASES_PATH}"
+                f"Не найден файл ibases.v8i по пути:\\n{IBASES_PATH}"
             )
             return
 
@@ -404,3 +435,44 @@ class TreeWindow(QMainWindow):
                 first_db_index = self.model.index(0, 0, folder_index)
                 self.tree.setCurrentIndex(first_db_index)
                 self.tree.scrollTo(first_db_index)
+
+    def run_dbm_app(self):
+        """Запуск внешнего приложения DBM с очисткой окружения."""
+        # --- ИЗМЕНЕНИЕ: Используем константы из config ---
+        if not os.path.exists(DBM_PYTHON_EXE):
+             QMessageBox.warning(self, "Ошибка", f"Не найден интерпретатор:\n{DBM_PYTHON_EXE}")
+             return
+        
+        if not os.path.exists(DBM_SCRIPT_PATH):
+             QMessageBox.warning(self, "Ошибка", f"Не найден скрипт:\n{DBM_SCRIPT_PATH}")
+             return
+
+        # Создаем процесс
+        proc = QProcess()
+        proc.setProgram(DBM_PYTHON_EXE)
+        proc.setArguments([DBM_SCRIPT_PATH])
+
+        # Получаем текущее окружение и удаляем переменные, которые "ломают" чужой Qt
+        env = QProcessEnvironment.systemEnvironment()
+        
+        # Список переменных, которые устанавливает PyInstaller/Qt и которые нужно убрать
+        keys_to_remove = [
+            "QT_QPA_PLATFORM_PLUGIN_PATH",
+            "QT_PLUGIN_PATH",
+            "PYTHONPATH",   # На всякий случай
+            "PYTHONHOME"    # На всякий случай
+        ]
+        
+        for key in keys_to_remove:
+            env.remove(key)
+
+        # Применяем чистое окружение к процессу
+        proc.setProcessEnvironment(env)
+
+        # Запускаем отвязанный процесс, используя настройки экземпляра
+        success = proc.startDetached()
+        
+        if success:
+            self.statusBar.showMessage("🚀 DBM API запущен", 3000)
+        else:
+            QMessageBox.critical(self, "Ошибка запуска", "Не удалось запустить процесс DBM.")

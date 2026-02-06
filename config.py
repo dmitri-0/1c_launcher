@@ -15,3 +15,7 @@ CF_DUMP_PATH = Path(r"D:\CF")
 
 # Путь к лог-файлу операций
 LOG_PATH = Path(r"D:\CF\log.txt")
+
+# Пути для запуска DBM API
+DBM_PYTHON_EXE = r"c:\ROOT\CodeBase\Py\dbm_api\venv\Scripts\python.exe"
+DBM_SCRIPT_PATH = r"c:\ROOT\CodeBase\Py\dbm_api\app.py"
