@@ -243,7 +243,10 @@ class TreeWindow(QMainWindow):
         else:
             db = self.operations.get_selected_database(self.model, self.tree)
             if db:
-                self.actions.open_database(db)
+                open_success = self.actions.open_database(db)
+                if open_success:
+                    self.minimize_to_tray()
+
 
     def handle_f3_open(self):
         """Обработка F3: открытие только базы (не процесса)."""
