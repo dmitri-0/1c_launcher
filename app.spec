@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['C:\\ROOT\\CodeBase\\Py\\1c_launcher\\app.py'],
+    ['app.py'],
     pathex=[],
     binaries=[],
     datas=[('C:\\ROOT\\CodeBase\\Py\\1c_launcher\\app_icon.ico', '.'), ('C:\\ROOT\\CodeBase\\Py\\1c_launcher\\gui\\actions\\Start-1C-Console.ps1', '.')],
