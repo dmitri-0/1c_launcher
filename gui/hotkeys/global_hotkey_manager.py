@@ -24,13 +24,13 @@ class GlobalHotkeyManager:
     
     Attributes:
         HOTKEY_ID: Уникальный идентификатор горячей клавиши
-        HOTKEY_MODIFIERS: Модификаторы (Ctrl+Shift)
+        HOTKEY_MODIFIERS: Модификаторы (Alt)
         HOTKEY_VK: Виртуальный код клавиши (тильда/ё)
     """
     
     # Константы для глобальной горячей клавиши
     HOTKEY_ID = 1
-    HOTKEY_MODIFIERS = 0x0006  # MOD_CONTROL (0x0002) + MOD_SHIFT (0x0004)
+    HOTKEY_MODIFIERS = 0x0001  # MOD_ALT (0x0001)
     HOTKEY_VK = 0xC0  # VK_OEM_3 (клавиша тильды/ё)
     
     def __init__(self, window):
@@ -45,7 +45,7 @@ class GlobalHotkeyManager:
     def register(self):
         """Регистрирует глобальную горячую клавишу для вызова окна.
         
-        По умолчанию регистрируется Ctrl+Shift+Ё.
+        По умолчанию регистрируется Alt+Ё.
         Комбинацию можно изменить через константы HOTKEY_MODIFIERS и HOTKEY_VK.
         """
         if not WINDOWS_HOTKEY_AVAILABLE:
