@@ -1,7 +1,7 @@
 """
 Модуль для построения модели "Открытые базы" (запущенные процессы 1C) для дерева
 """
-from PySide6.QtGui import QStandardItem
+from PySide6.QtGui import QStandardItem, QColor
 from PySide6.QtCore import Qt
 from services.process_manager import ProcessManager, Process1C
 
@@ -34,6 +34,11 @@ class OpenedBasesTreeBuilder:
         process_count = 0
         for proc in processes:
             row = [QStandardItem(proc.name)]
+
+            # Устанавливаем цвет текста для всей строки или только для первой колонки
+            # color = QColor("#00FF00") if "тест" in proc.name.lower() else QColor("#FF0000")
+            # row[0].setForeground(color)
+                
             # Записываем объект в data, чтобы потом работать
             for item in row:
                 item.setEditable(False)

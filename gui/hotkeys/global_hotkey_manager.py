@@ -30,9 +30,10 @@ class GlobalHotkeyManager:
     
     # Константы для глобальной горячей клавиши
     HOTKEY_ID = 1
-    HOTKEY_MODIFIERS = 0x0001  # MOD_ALT (0x0001)
+    # Ctrl (0x0002) + Alt (0x0001) + Shift (0x0004) = 0x0007
+    HOTKEY_MODIFIERS = 0x0002 | 0x0004
     HOTKEY_VK = 0xC0  # VK_OEM_3 (клавиша тильды/ё)
-    
+
     def __init__(self, window):
         """Инициализация менеджера.
         
