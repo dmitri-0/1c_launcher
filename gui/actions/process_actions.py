@@ -25,7 +25,7 @@ class ProcessActions:
         Получить выбранный процесс или TrackedApp в дереве
         
         Returns:
-            Process1C, TrackedApp или None
+            Process1C, TrackedApp или None (возвращает None если выбрана база данных)
         """
         index = self.window.tree.currentIndex()
         if not index.isValid():
@@ -36,10 +36,19 @@ class ProcessActions:
             return None
         
         data = item.data(Qt.UserRole)
-        # Может быть Process1C или TrackedApp
-        if data:
+        if not data:
+            return None
+        
+        # Проверяем, что это действительно процесс, а не база данных
+        # Process1C - это процесс 1C
+        if isinstance(data, Process1C):
             return data
         
+        # TrackedApp имеет атрибут is_running
+        if hasattr(data, 'is_running'):
+            return data
+        
+        # Если это база данных (Database1C) или что-то другое - возвращаем None
         return None
     
     def activate_process(self, process: Optional[Union[Process1C, object]] = None):
