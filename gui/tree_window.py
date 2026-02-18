@@ -419,6 +419,7 @@ class TreeWindow(QMainWindow):
         main_folder_idx = None
         recent_folder_idx = None
 
+        # Находим индексы всех необходимых папок
         for folder_idx in range(self.model.rowCount()):
             folder_item = self.model.item(folder_idx, 0)
             if not folder_item:
@@ -430,11 +431,24 @@ class TreeWindow(QMainWindow):
             elif "Недавние" in folder_item.text():
                 recent_folder_idx = folder_idx
 
+        # ВСЕГДА раскрываем узлы "Открытые базы" и "Основное", если они содержат детей
+        if opened_folder_idx is not None:
+            folder_item = self.model.item(opened_folder_idx, 0)
+            if folder_item and folder_item.rowCount() > 0:
+                folder_index = self.model.index(opened_folder_idx, 0)
+                self.tree.expand(folder_index)
+
+        if main_folder_idx is not None:
+            folder_item = self.model.item(main_folder_idx, 0)
+            if folder_item and folder_item.rowCount() > 0:
+                folder_index = self.model.index(main_folder_idx, 0)
+                self.tree.expand(folder_index)
+
+        # Теперь устанавливаем курсор (логика выбора)
         # Сначала проверяем папку "Открытые базы"
         if opened_folder_idx is not None:
             folder_item = self.model.item(opened_folder_idx, 0)
             folder_index = self.model.index(opened_folder_idx, 0)
-            self.tree.expand(folder_index)
             if folder_item.rowCount() > 0:
                 if self.last_activated_process:
                     for proc_idx in range(0, folder_item.rowCount()):
@@ -455,7 +469,6 @@ class TreeWindow(QMainWindow):
         if main_folder_idx is not None:
             folder_item = self.model.item(main_folder_idx, 0)
             folder_index = self.model.index(main_folder_idx, 0)
-            self.tree.expand(folder_index)
             if folder_item.rowCount() > 0:
                 if self.last_activated_main_process:
                     for proc_idx in range(0, folder_item.rowCount()):
