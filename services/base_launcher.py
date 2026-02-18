@@ -11,13 +11,12 @@ class BaseLauncher:
     def __init__(self):
         self.platform = platform.system()
     
-    def launch_database(self, database: Database1C, debug_mode: bool = False) -> bool:
+    def launch_database(self, database: Database1C) -> bool:
         """
         Запускает базу данных 1С
         
         Args:
             database: Объект базы данных
-            debug_mode: Режим отладки (отключение защиты от опасных действий + привилегированный режим)
             
         Returns:
             True если запуск прошел успешно, False в противном случае
@@ -33,19 +32,13 @@ class BaseLauncher:
             # Формируем команду запуска
             command = [str(executable), "ENTERPRISE", f"/IBConnectionString{database.connect}"]
             
-            # В режиме отладки добавляем параметры для отключения защиты и привилегированного режима
-            if debug_mode:
-                command.append("/DisableUnsafeActionProtection")
-                command.append("/AllowExecuteScheduledJobs")
-            
             # Запускаем процесс
             subprocess.Popen(command, 
                            stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL,
                            creationflags=subprocess.DETACHED_PROCESS if self.platform == 'Windows' else 0)
             
-            mode_info = " (режим отладки)" if debug_mode else ""
-            print(f"✅ База {database.name} запущена{mode_info}")
+            print(f"✅ База {database.name} запущена")
             return True
             
         except Exception as e:
