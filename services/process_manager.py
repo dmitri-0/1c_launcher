@@ -14,6 +14,7 @@ import win32process
 import time
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
+from config import TRACKED_APPLICATIONS
 
 
 @dataclass
@@ -40,7 +41,6 @@ class ProcessManager:
     """
     
     PROCESS_NAMES = ["1cv8.exe", "1cv8c.exe"]
-    MAIN_PROCESS_NAMES = ["Code.exe", "TOTALCMD.EXE", "WindowsTerminal.exe"]
     
     @staticmethod
     def get_running_processes() -> List[Process1C]:
@@ -91,47 +91,38 @@ class ProcessManager:
     @staticmethod
     def get_running_main_processes() -> List[Process1C]:
         """
-        Получить список всех запущенных основных процессов (Code.exe, TOTALCMD.EXE, WindowsTerminal.exe)
+        Получить список всех запущенных основных процессов из TRACKED_APPLICATIONS
         
         Returns:
             Список Process1C объектов
         """
         processes = []
         
-        # Собираем PID всех основных процессов
+        # Создаем словарь для быстрого поиска конфигурации по имени процесса
+        app_configs = {app["process_name"]: app for app in TRACKED_APPLICATIONS}
+        
+        # Собираем PID всех отслеживаемых процессов
         process_pids = []
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                if proc.info['name'] in ProcessManager.MAIN_PROCESS_NAMES:
-                    process_pids.append(proc.info['pid'])
+                if proc.info['name'] in app_configs:
+                    process_pids.append((proc.info['pid'], proc.info['name']))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
         # Для каждого PID находим главное окно
-        for pid in process_pids:
+        for pid, process_name in process_pids:
             window_info = ProcessManager._find_main_window(pid)
             if window_info:
                 hwnd, title = window_info
-                # Получаем имя процесса
-                try:
-                    proc = psutil.Process(pid)
-                    process_name = proc.name()
-                except:
+                
+                # Получаем конфигурацию приложения
+                app_config = app_configs.get(process_name)
+                if not app_config:
                     continue
                 
-                # Определяем иконку в зависимости от типа процесса
-                if process_name == "Code.exe":
-                    icon = "🟦"  # Visual Studio Code
-                    app_name = "VS Code"
-                elif process_name == "TOTALCMD.EXE":
-                    icon = "💾"  # Total Commander
-                    app_name = "Total Commander"
-                elif process_name == "WindowsTerminal.exe":
-                    icon = "❯_"  # Terminal
-                    app_name = "Terminal"
-                else:
-                    icon = "💻"
-                    app_name = process_name
+                icon = app_config.get("icon", "💻")
+                app_name = app_config.get("display_name", process_name)
                 
                 # Если заголовка нет - отображаем только имя приложения
                 if title:
