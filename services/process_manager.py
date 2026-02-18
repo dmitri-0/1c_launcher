@@ -1,7 +1,8 @@
 """
-Модуль для управления процессами 1cv8.exe и 1cv8c.exe
+Модуль для управления процессами 1cv8.exe, 1cv8c.exe и основными процессами
 Позволяет:
 - Получать список запущенных процессов 1C
+- Получать список запущенных основных процессов (Code.exe, TOTALCMD.EXE, WindowsTerminal.exe)
 - Активировать окно процесса
 - Закрывать процесс корректно или принудительно
 """
@@ -35,10 +36,11 @@ class Process1C:
 
 class ProcessManager:
     """
-    Менеджер для работы с процессами 1cv8.exe и 1cv8c.exe
+    Менеджер для работы с процессами 1cv8.exe, 1cv8c.exe и основными процессами
     """
     
     PROCESS_NAMES = ["1cv8.exe", "1cv8c.exe"]
+    MAIN_PROCESS_NAMES = ["Code.exe", "TOTALCMD.EXE", "WindowsTerminal.exe"]
     
     @staticmethod
     def get_running_processes() -> List[Process1C]:
@@ -82,6 +84,61 @@ class ProcessManager:
                 display_name = f"{icon} {base_name}"
 
                 # В объект Process1C можно добавить флаг is_test для удобства
+                processes.append(Process1C(pid=pid, name=display_name, hwnd=hwnd))
+        
+        return processes
+    
+    @staticmethod
+    def get_running_main_processes() -> List[Process1C]:
+        """
+        Получить список всех запущенных основных процессов (Code.exe, TOTALCMD.EXE, WindowsTerminal.exe)
+        
+        Returns:
+            Список Process1C объектов
+        """
+        processes = []
+        
+        # Собираем PID всех основных процессов
+        process_pids = []
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                if proc.info['name'] in ProcessManager.MAIN_PROCESS_NAMES:
+                    process_pids.append(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Для каждого PID находим главное окно
+        for pid in process_pids:
+            window_info = ProcessManager._find_main_window(pid)
+            if window_info:
+                hwnd, title = window_info
+                # Получаем имя процесса
+                try:
+                    proc = psutil.Process(pid)
+                    process_name = proc.name()
+                except:
+                    continue
+                
+                # Определяем иконку в зависимости от типа процесса
+                if process_name == "Code.exe":
+                    icon = "💻"  # Visual Studio Code
+                    app_name = "VS Code"
+                elif process_name == "TOTALCMD.EXE":
+                    icon = "📁"  # Total Commander
+                    app_name = "Total Commander"
+                elif process_name == "WindowsTerminal.exe":
+                    icon = "💻"  # Terminal
+                    app_name = "Terminal"
+                else:
+                    icon = "💻"
+                    app_name = process_name
+                
+                # Если заголовка нет - отображаем только имя приложения
+                if title:
+                    display_name = f"{icon} {title}"
+                else:
+                    display_name = f"{icon} {app_name}"
+
                 processes.append(Process1C(pid=pid, name=display_name, hwnd=hwnd))
         
         return processes
