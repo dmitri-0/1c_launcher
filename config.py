@@ -31,7 +31,7 @@ TRACKED_APPLICATIONS = [
     {
         "process_name": "Code.exe",
         "display_name": "VS Code",
-        "icon": "🟦",
+        "icon": "🔷",
         "launch_path": r"C:\Users\{username}\AppData\Local\Programs\Microsoft VS Code\Code.exe"
     },
     {
