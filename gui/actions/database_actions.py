@@ -516,7 +516,9 @@ class DatabaseActions:
                     '/DebuggerURL tcp://localhost',
                     '/UC""',
                     f'/Execute"{IR_TOOLS_PATH}"',
-                    '/WA-'
+                    '/WA-',
+                    '/DisableUnsafeActionProtection',
+                    '/AllowExecuteScheduledJobs'
                 ])
 
             if mode == 'ENTERPRISE':
