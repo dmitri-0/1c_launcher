@@ -517,8 +517,7 @@ class DatabaseActions:
                     '/UC""',
                     f'/Execute"{IR_TOOLS_PATH}"',
                     '/WA-',
-                    '/DisableUnsafeActionProtection',
-                    #'/AllowExecuteScheduledJobs'
+                    #'/DisableUnsafeActionProtection',
                 ])
 
             if mode == 'ENTERPRISE':
