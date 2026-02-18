@@ -31,19 +31,19 @@ TRACKED_APPLICATIONS = [
     {
         "process_name": "Code.exe",
         "display_name": "VS Code",
-        "icon": "💻",
+        "icon": "🟦",
         "launch_path": r"C:\Users\{username}\AppData\Local\Programs\Microsoft VS Code\Code.exe"
     },
     {
         "process_name": "TOTALCMD.EXE",
         "display_name": "Total Commander",
-        "icon": "📁",
-        "launch_path": r"C:\totalcmd\TOTALCMD.EXE"
+        "icon": "🟨",
+        "launch_path": r"c:\ROOT\TCPU73\TOTALCMD.EXE"
     },
     {
         "process_name": "WindowsTerminal.exe",
         "display_name": "Terminal",
-        "icon": "💻",
+        "icon": "❯_",
         "launch_path": r"wt.exe"  # Windows Terminal можно запустить через wt.exe
     }
 ]
