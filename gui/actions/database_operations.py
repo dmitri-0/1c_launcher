@@ -165,7 +165,7 @@ class DatabaseOperations:
         reply = QMessageBox.question(
             self.window,
             "Очистка кэша",
-            f"Очистить кэш базы '{database.name}'?\n\nБудет удален:\n- Программный кэш ...{database.id})\n- Пользовательский кэш ...{database.id})",
+            f"Очистить кэш базы '{database.name}'?\n\nБудет удален:\n- Программный кэш ...{database.id})\n- Пользовательский кэш ...{database.id})\n- Кэш ИР Портативный (по строке подключения)",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -243,6 +243,7 @@ class DatabaseOperations:
                     deleted_items.append(f"⚠️ Ошибка удаления программного кэша: {e}")
             else:
                 deleted_items.append("ℹ️ Программный кэш не найден")
+            
             user_cache_path = appdata_roaming / '1C' / '1Cv82' / database.id
             if user_cache_path.exists():
                 try:
@@ -252,6 +253,45 @@ class DatabaseOperations:
                     deleted_items.append(f"⚠️ Ошибка удаления пользовательского кэша: {e}")
             else:
                 deleted_items.append("ℹ️ Пользовательский кэш не найден")
+
+            # Очистка кэша ИР Портативный
+            ir_folder_name = self._generate_ir_folder_name(database.connect)
+            if ir_folder_name:
+                ir_cache_path = appdata_local / '1C' / '1cv8' / ir_folder_name
+                if ir_cache_path.exists():
+                    try:
+                        shutil.rmtree(ir_cache_path)
+                        deleted_items.append(f"✅ Кэш ИР: {ir_cache_path}")
+                    except Exception as e:
+                        deleted_items.append(f"⚠️ Ошибка удаления кэша ИР: {e}")
+                else:
+                    deleted_items.append(f"ℹ️ Кэш ИР не найден ({ir_folder_name})")
+
             return deleted_items
         except Exception as e:
             return [f"❌ Ошибка очистки кэша: {e}"]
+
+    def _generate_ir_folder_name(self, connection_string):
+        """
+        Генерирует имя папки кэша для ИР Портативный на основе строки подключения.
+        Пример: Srvr="srv-1c-8325:1541";Ref="ZUP_0202_Pechericadv_1";
+        Результат: Srvr__srv_1c_8325_1541__Ref__ZUP_0202_Pechericadv_1__
+        """
+        if not connection_string:
+            return ""
+        
+        name = connection_string
+        # Replace parameter separators and quotes
+        name = name.replace('="', '__')
+        name = name.replace('";', '__')
+        
+        # Replace unsafe characters in filenames
+        name = name.replace(':', '_')
+        name = name.replace('-', '_')
+        name = name.replace('.', '_')
+        name = name.replace(',', '_')
+        name = name.replace('\\', '_')
+        name = name.replace('/', '_')
+        name = name.replace(' ', '_')
+        
+        return name
