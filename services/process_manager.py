@@ -121,13 +121,13 @@ class ProcessManager:
                 
                 # Определяем иконку в зависимости от типа процесса
                 if process_name == "Code.exe":
-                    icon = "💻"  # Visual Studio Code
+                    icon = "🟦"  # Visual Studio Code
                     app_name = "VS Code"
                 elif process_name == "TOTALCMD.EXE":
-                    icon = "📁"  # Total Commander
+                    icon = "💾"  # Total Commander
                     app_name = "Total Commander"
                 elif process_name == "WindowsTerminal.exe":
-                    icon = "💻"  # Terminal
+                    icon = "❯_"  # Terminal
                     app_name = "Terminal"
                 else:
                     icon = "💻"

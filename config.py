@@ -37,7 +37,7 @@ TRACKED_APPLICATIONS = [
     {
         "process_name": "TOTALCMD.EXE",
         "display_name": "Total Commander",
-        "icon": "🟨",
+        "icon": "💾",
         "launch_path": r"c:\ROOT\TCPU73\TOTALCMD.EXE"
     },
     {
