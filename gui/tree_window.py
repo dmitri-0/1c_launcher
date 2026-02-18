@@ -206,7 +206,7 @@ class TreeWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Файл не найден",
-                f"Не найден файл ibases.v8i по пути:\\n{IBASES_PATH}"
+                f"Не найден файл ibases.v8i по пути:\n{IBASES_PATH}"
             )
             return
 
@@ -450,12 +450,12 @@ class TreeWindow(QMainWindow):
             folder_item = self.model.item(opened_folder_idx, 0)
             folder_index = self.model.index(opened_folder_idx, 0)
             if folder_item.rowCount() > 0:
-                if self.last_activated_process:
+                if self.last_activated_process and isinstance(self.last_activated_process, Process1C):
                     for proc_idx in range(0, folder_item.rowCount()):
                         proc_item = folder_item.child(proc_idx, 0)
                         if proc_item:
                             proc = proc_item.data(Qt.UserRole)
-                            if proc and proc.pid == self.last_activated_process.pid:
+                            if proc and isinstance(proc, Process1C) and proc.pid == self.last_activated_process.pid:
                                 proc_index = self.model.index(proc_idx, 0, folder_index)
                                 self.tree.setCurrentIndex(proc_index)
                                 self.tree.scrollTo(proc_index)
@@ -470,12 +470,12 @@ class TreeWindow(QMainWindow):
             folder_item = self.model.item(main_folder_idx, 0)
             folder_index = self.model.index(main_folder_idx, 0)
             if folder_item.rowCount() > 0:
-                if self.last_activated_main_process:
+                if self.last_activated_main_process and hasattr(self.last_activated_main_process, 'pid'):
                     for proc_idx in range(0, folder_item.rowCount()):
                         proc_item = folder_item.child(proc_idx, 0)
                         if proc_item:
                             proc = proc_item.data(Qt.UserRole)
-                            if proc and proc.pid == self.last_activated_main_process.pid:
+                            if proc and hasattr(proc, 'pid') and proc.pid == self.last_activated_main_process.pid:
                                 proc_index = self.model.index(proc_idx, 0, folder_index)
                                 self.tree.setCurrentIndex(proc_index)
                                 self.tree.scrollTo(proc_index)
