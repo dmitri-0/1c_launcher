@@ -4,10 +4,10 @@ from PySide6.QtWidgets import (
     QStatusBar, QMessageBox, QSystemTrayIcon, QMenu, QStyle, QApplication,
     QPushButton, QHBoxLayout
 )
-from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QIcon, QAction
+from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QAction
 from PySide6.QtCore import Qt, QProcess, QProcessEnvironment
 from services.base_reader import BaseReader
-from services.process_manager import ProcessManager, Process1C
+from services.process_manager import Process1C
 from config import IBASES_PATH, ENCODING, DBM_PYTHON_EXE, DBM_SCRIPT_PATH
 from dialogs import HelpDialog, DatabaseSettingsDialog
 from models.database import Database1C

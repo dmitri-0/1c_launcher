@@ -3,7 +3,7 @@
 """
 import os
 import subprocess
-from PySide6.QtCore import Qt, QTimer, QProcess
+from PySide6.QtCore import Qt, QTimer
 from services.process_manager import ProcessManager, Process1C
 from typing import Optional, Union
 
