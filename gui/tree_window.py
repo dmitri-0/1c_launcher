@@ -14,7 +14,7 @@ from models.database import Database1C
 
 from gui.hotkeys import GlobalHotkeyManager
 from gui.actions import DatabaseActions, DatabaseOperations, ProcessActions
-from gui.tree import TreeBuilder, OpenedBasesTreeBuilder
+from gui.tree import TreeBuilder, OpenedBasesTreeBuilder, MainProcessesTreeBuilder
 from gui.theme import ThemeManager
 
 
@@ -79,6 +79,7 @@ class TreeWindow(QMainWindow):
         self.all_bases = []
         self.last_launched_db = None
         self.last_activated_process = None  # Последний активированный процесс 1C
+        self.last_activated_main_process = None  # Последний активированный основной процесс
 
         # Процесс блокнота для редактирования ibases.v8i
         self._ibases_editor_process = None
@@ -93,11 +94,13 @@ class TreeWindow(QMainWindow):
         self.process_actions = ProcessActions(self)
         self.tree_builder = TreeBuilder(self.model)
         self.opened_bases_builder = OpenedBasesTreeBuilder(self.model)
+        self.main_processes_builder = MainProcessesTreeBuilder(self.model)
 
         self.setup_shortcuts()
         self.hotkey_manager.register()
         self.load_bases()
         self.refresh_opened_bases()
+        self.refresh_main_processes()
         self.expand_and_select_initial()
 
     def setup_tray_icon(self):
@@ -134,6 +137,7 @@ class TreeWindow(QMainWindow):
         self.activateWindow()
         self.raise_()
         self.refresh_opened_bases()
+        self.refresh_main_processes()
         self.expand_and_select_initial()
 
     def minimize_to_tray(self):
@@ -241,7 +245,18 @@ class TreeWindow(QMainWindow):
         """Обработка Enter: активация процесса или открытие базы."""
         process = self.process_actions.get_selected_process()
         if process:
-            self.process_actions.activate_process(process)
+            # Проверяем, какой тип процесса выбран
+            selected_index = self.tree.currentIndex()
+            if selected_index.isValid():
+                parent_item = self.model.itemFromIndex(selected_index.parent())
+                if parent_item and "Основное" in parent_item.text():
+                    # Основной процесс
+                    self.process_actions.activate_process(process)
+                    self.last_activated_main_process = process
+                else:
+                    # Процесс 1С
+                    self.process_actions.activate_process(process)
+                    self.last_activated_process = process
         else:
             db = self.operations.get_selected_database(self.model, self.tree)
             if db:
@@ -337,7 +352,16 @@ class TreeWindow(QMainWindow):
             self.tree.setFirstColumnSpanned(folder_index.row(), folder_index.parent(), True)
             for proc_row in range(process_count):
                 self.tree.setFirstColumnSpanned(proc_row, folder_index, True)
-            self.expand_and_select_initial()
+
+    def refresh_main_processes(self):
+        """Обновление папки Основное с процессами."""
+        result = self.main_processes_builder.build_tree()
+        if result:
+            folder_item, process_count = result
+            folder_index = self.tree.model().indexFromItem(folder_item)
+            self.tree.setFirstColumnSpanned(folder_index.row(), folder_index.parent(), True)
+            for proc_row in range(process_count):
+                self.tree.setFirstColumnSpanned(proc_row, folder_index, True)
 
     def save_bases(self):
         try:
@@ -386,11 +410,13 @@ class TreeWindow(QMainWindow):
     def reload_and_navigate(self):
         self.load_bases()
         self.refresh_opened_bases()
+        self.refresh_main_processes()
         self.expand_and_select_initial()
 
     def expand_and_select_initial(self):
         """Разворачивает нужные папки и устанавливает курсор."""
         opened_folder_idx = None
+        main_folder_idx = None
         recent_folder_idx = None
 
         for folder_idx in range(self.model.rowCount()):
@@ -399,9 +425,12 @@ class TreeWindow(QMainWindow):
                 continue
             if "Открытые базы" in folder_item.text():
                 opened_folder_idx = folder_idx
+            elif "Основное" in folder_item.text():
+                main_folder_idx = folder_idx
             elif "Недавние" in folder_item.text():
                 recent_folder_idx = folder_idx
 
+        # Сначала проверяем папку "Открытые базы"
         if opened_folder_idx is not None:
             folder_item = self.model.item(opened_folder_idx, 0)
             folder_index = self.model.index(opened_folder_idx, 0)
@@ -422,6 +451,28 @@ class TreeWindow(QMainWindow):
                 self.tree.scrollTo(first_proc_index)
                 return
 
+        # Затем проверяем папку "Основное"
+        if main_folder_idx is not None:
+            folder_item = self.model.item(main_folder_idx, 0)
+            folder_index = self.model.index(main_folder_idx, 0)
+            self.tree.expand(folder_index)
+            if folder_item.rowCount() > 0:
+                if self.last_activated_main_process:
+                    for proc_idx in range(0, folder_item.rowCount()):
+                        proc_item = folder_item.child(proc_idx, 0)
+                        if proc_item:
+                            proc = proc_item.data(Qt.UserRole)
+                            if proc and proc.pid == self.last_activated_main_process.pid:
+                                proc_index = self.model.index(proc_idx, 0, folder_index)
+                                self.tree.setCurrentIndex(proc_index)
+                                self.tree.scrollTo(proc_index)
+                                return
+                first_proc_index = self.model.index(0, 0, folder_index)
+                self.tree.setCurrentIndex(first_proc_index)
+                self.tree.scrollTo(first_proc_index)
+                return
+
+        # Наконец проверяем папку "Недавние"
         if recent_folder_idx is not None:
             folder_item = self.model.item(recent_folder_idx, 0)
             folder_index = self.model.index(recent_folder_idx, 0)
