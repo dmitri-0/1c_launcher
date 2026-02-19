@@ -8,7 +8,7 @@ IBASES_PATH = Path(os.getenv('USERPROFILE')) / 'AppData' / 'Roaming' / '1C' / '1
 ENCODING = 'utf-8-sig'
 
 # Путь к обработке инструментов ИР
-IR_TOOLS_PATH = r"c:\ROOT\CodeBase\1C\Обработки\ИР_Портативный\ирПортативный.epf"
+IR_TOOLS_PATH = r"c:\ROOT\CodeBase\1C\data\Tools\ИР_Портативный\ирПортативный.epf"
 
 # Путь для выгрузки CF (папка)
 CF_DUMP_PATH = Path(r"D:\CF")
