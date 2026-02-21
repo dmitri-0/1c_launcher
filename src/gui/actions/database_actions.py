@@ -14,10 +14,10 @@
     _db_recent_mixin.py          — управление недавними базами
 """
 
-from ._db_launch_mixin import DbLaunchMixin
-from ._db_server_console_mixin import DbServerConsoleMixin
-from ._db_designer_mixin import DbDesignerMixin
-from ._db_recent_mixin import DbRecentMixin
+from mixins.db_launch_mixin import DbLaunchMixin
+from mixins.db_server_console_mixin import DbServerConsoleMixin
+from mixins.db_designer_mixin import DbDesignerMixin
+from mixins.db_recent_mixin import DbRecentMixin
 
 
 class DatabaseActions(
