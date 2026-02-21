@@ -2,7 +2,7 @@ import subprocess
 import platform
 from pathlib import Path
 from typing import Optional
-from src.models.database import Database1C
+from models.database import Database1C
 
 
 class BaseLauncher:

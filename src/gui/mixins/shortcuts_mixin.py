@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QKeySequence, QShortcut
-from dialogs import DatabaseSettingsDialog
+from ..dialogs import DatabaseSettingsDialog
 from models.database import Database1C
 from gui.theme import ThemeManager
 
