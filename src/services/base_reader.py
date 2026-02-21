@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import List
-from models.database import Database1C
+from src.models.database import Database1C
 from datetime import datetime
 
 class BaseReader:

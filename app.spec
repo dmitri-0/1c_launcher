@@ -3,9 +3,9 @@
 
 a = Analysis(
     ['app.py'],
-    pathex=[],
+    pathex=['src'],
     binaries=[],
-    datas=[('C:\\ROOT\\CodeBase\\Py\\1c_launcher\\app_icon.ico', '.'), ('C:\\ROOT\\CodeBase\\Py\\1c_launcher\\gui\\actions\\Start-1C-Console.ps1', '.')],
+    datas=[('C:\\ROOT\\CodeBase\\Py\\1c_launcher\\src\\resources\\app_icon.ico', '.'), ('C:\\ROOT\\CodeBase\\Py\\1c_launcher\\src\\resources\\Start-1C-Console.ps1', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\ROOT\\CodeBase\\Py\\1c_launcher\\app_icon.ico'],
+    icon=['C:\\ROOT\\CodeBase\\Py\\1c_launcher\\src\\resources\\app_icon.ico'],
 )
