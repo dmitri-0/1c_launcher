@@ -144,6 +144,6 @@ class ShortcutsMixin:
 
     def show_help(self):
         """Открыть диалог справки."""
-        from dialogs import HelpDialog
+        from ..dialogs import HelpDialog
         dialog = HelpDialog(self)
         dialog.exec()

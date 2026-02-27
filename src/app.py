@@ -7,19 +7,17 @@ from gui.tree_window import TreeWindow
 from gui.theme import ThemeManager
 
 def get_icon_path():
-    """Получить путь к иконке приложения.
-    
-    Работает как в режиме разработки, так и после сборки PyInstaller.
-    """
+    """Получить путь к иконке приложения (dev + PyInstaller)."""
     if getattr(sys, 'frozen', False):
-        # Запуск из собранного exe (PyInstaller)
+        # В сборке PyInstaller иконку нужно добавить через --add-data
         base_path = sys._MEIPASS
+        return os.path.join(base_path, 'resources', 'app_icon.ico')
     else:
-        # Запуск из исходников
+        # Запуск из исходников: src/resources/app_icon.ico
         base_path = os.path.dirname(os.path.abspath(__file__))
+        # __file__ сейчас где-то внутри src (например src/main.py)
+        return os.path.abspath(os.path.join(base_path, 'resources', 'app_icon.ico'))
     
-    return os.path.join(base_path, 'app_icon.ico')
-
 def main():
     app = QApplication(sys.argv)
     
