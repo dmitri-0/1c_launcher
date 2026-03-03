@@ -8,43 +8,43 @@ from gui.theme import ThemeManager
 class ShortcutsMixin:
     """Миксин для настройки горячих клавиш и их обработчиков."""
 
-    def setup_shortcuts(self):
-        """Настройка горячих клавиш."""
-        shortcuts = {
-            "F1": self.show_help,
-            "F3": self.handle_f3_open,
-            "F4": self.handle_f4_open,
-            "Shift+Return": self.handle_f4_open,
-            "F5": self.handle_f5_ir_tools,
-            "F6": self.handle_f6_server_console,
-            "F7": self.handle_f7_save_cfg,
-            "Ctrl+F7": self.handle_ctrl_f7_update_cfg_from_repository,
-            "F8": self.handle_f8_dump_cf,
-            "Return": self.handle_enter,
-            "Ctrl+C": lambda: self.operations.copy_connection_string(
-                self.operations.get_selected_database(self.model, self.tree)
-            ),
-            "Ctrl+D": lambda: self.operations.duplicate_database(
-                self.operations.get_selected_database(self.model, self.tree), Database1C
-            ),
-            "Ctrl+E": lambda: self.operations.edit_database_settings(
-                self.operations.get_selected_database(self.model, self.tree), DatabaseSettingsDialog
-            ),
-            "Ctrl+I": self.edit_ibases_in_notepad,
-            "Del": self.handle_delete,
-            "Backspace": self.handle_delete,
-            "Shift+Del": self.handle_shift_delete,
-            "Shift+F10": lambda: self.operations.add_database(
-                Database1C, DatabaseSettingsDialog,
-                lambda: self.operations.get_current_folder(self.model, self.tree)
-            ),
-            "Esc": self.minimize_to_tray,
-            "Shift+Esc": self.quit_application,
-            "F10": self.toggle_theme,
-        }
-        for key, handler in shortcuts.items():
-            shortcut = QShortcut(QKeySequence(key), self)
-            shortcut.activated.connect(handler)
+    # def setup_shortcuts(self):
+    #     """Настройка горячих клавиш."""
+    #     shortcuts = {
+    #         "F1": self.show_help,
+    #         "F3": self.handle_f3_open,
+    #         "F4": self.handle_f4_open,
+    #         "Shift+Return": self.handle_f4_open,
+    #         "F5": self.handle_f5_ir_tools,
+    #         "F6": self.handle_f6_server_console,
+    #         "F7": self.handle_f7_save_cfg,
+    #         "Ctrl+F7": self.handle_ctrl_f7_update_cfg_from_repository,
+    #         "F8": self.handle_f8_dump_cf,
+    #         "Return": self.handle_enter,
+    #         "Ctrl+C": lambda: self.operations.copy_connection_string(
+    #             self.operations.get_selected_database(self.model, self.tree)
+    #         ),
+    #         "Ctrl+D": lambda: self.operations.duplicate_database(
+    #             self.operations.get_selected_database(self.model, self.tree), Database1C
+    #         ),
+    #         "Ctrl+E": lambda: self.operations.edit_database_settings(
+    #             self.operations.get_selected_database(self.model, self.tree), DatabaseSettingsDialog
+    #         ),
+    #         "Ctrl+I": self.edit_ibases_in_notepad,
+    #         "Del": self.handle_delete,
+    #         "Backspace": self.handle_delete,
+    #         "Shift+Del": self.handle_shift_delete,
+    #         "Shift+F10": lambda: self.operations.add_database(
+    #             Database1C, DatabaseSettingsDialog,
+    #             lambda: self.operations.get_current_folder(self.model, self.tree)
+    #         ),
+    #         "Esc": self.minimize_to_tray,
+    #         "Shift+Esc": self.quit_application,
+    #         "F10": self.toggle_theme,
+    #     }
+    #     for key, handler in shortcuts.items():
+    #         shortcut = QShortcut(QKeySequence(key), self)
+    #         shortcut.activated.connect(handler)
 
     def toggle_theme(self):
         """Переключение темы приложения (светлая/темная)."""
