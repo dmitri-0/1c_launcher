@@ -416,8 +416,8 @@ class DbDesignerMixin:
         log_dump = self._build_action_log_path(base_stem, "DumpCfg")
 
         bat = []
-        bat.append('chcp 65001 >nul')
         bat.append('@echo off')
+        bat.append('chcp 65001 >nul')
         bat.append(f'set PLATFORM="{executable}"')
         bat.append(f'set BASE={base_param}')
         bat.append(f'set LOG_UPDATE="{log_update}"')
