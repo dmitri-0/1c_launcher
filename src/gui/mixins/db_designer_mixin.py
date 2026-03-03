@@ -115,7 +115,7 @@ class DbDesignerMixin:
             return False
 
     def dump_cf(self, database):
-        """F8: выгрузка конфигурации в CF (Designer /DumpCfg)."""
+        """Выгрузка конфигурации в CF (Designer /DumpCfg)."""
         if not database:
             self.window.statusBar.showMessage("❌ База не выбрана")
             return False
@@ -207,7 +207,7 @@ class DbDesignerMixin:
             # Запускаем без блокировки GUI (в отдельном процессе cmd)
             subprocess.Popen(["cmd", "/c", bat_path], shell=False)
 
-            self.window.statusBar.showMessage(f"💾 Выгрузка CF запущена: {dump_file}")
+            self.window.statusBar.showMessage(f"💾 Обновление и выгрузка CF запущена: {dump_file}")
 
             # Убираем BAT позже (даём cmd время начать выполнение)
             QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
@@ -215,6 +215,60 @@ class DbDesignerMixin:
 
         except Exception as e:
             self.window.statusBar.showMessage(f"❌ Ошибка подготовки выгрузки CF: {e}")
+            return False
+
+    def update_cfg_from_repository_and_dump_cf(self, database):
+        """Обновление конфигурации из хранилища, сохранение БД и выгрузка конфигурации в CF (Designer)."""
+        if not database:
+            self.window.statusBar.showMessage("❌ База не выбрана")
+            return False
+
+        if platform.system() != 'Windows':
+            self.window.statusBar.showMessage("❌ Операция поддерживается только в Windows")
+            return False
+
+        executable = self._get_1c_executable(database, mode='DESIGNER')
+        if not executable:
+            self.window.statusBar.showMessage("❌ Не удалось найти 1cv8.exe для конфигуратора")
+            return False
+
+        try:
+            dump_file = self._build_cf_dump_path(database)
+            
+            # Готовим директории
+            dump_file.parent.mkdir(parents=True, exist_ok=True)
+            log_dir = self._get_log_dir()
+            log_dir.mkdir(parents=True, exist_ok=True)
+
+            base_stem = dump_file.stem
+            log_update = self._build_action_log_path(base_stem, "RepositoryUpdateCfg")
+            log_dump = self._build_action_log_path(base_stem, "DumpCfg")
+
+            bat_text = self._build_repo_update_and_dump_cf_bat(
+                executable=Path(executable),
+                database=database,
+                dump_file=dump_file,
+                log_update=log_update,
+                log_dump=log_dump,
+            )
+
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                suffix='.bat',
+                delete=False,
+                encoding='utf-8'
+            ) as bat_file:
+                bat_file.write(bat_text)
+                bat_path = bat_file.name
+
+            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
+            self.window.statusBar.showMessage(f"📥 Обновление из хранилища и выгрузка CF запущена (log: {log_update})")
+
+            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            return True
+
+        except Exception as e:
+            self.window.statusBar.showMessage(f"❌ Ошибка подготовки RepositoryUpdateCfg+DumpCfg: {e}")
             return False
 
     # ------------------------------------------------------------------ #
@@ -371,6 +425,42 @@ class DbDesignerMixin:
         bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /UpdateDBCfg /Out%LOG_UPDATE%')
         bat.append('if errorlevel 1 (')
         bat.append('    echo ОШИБКА при обновлении конфигурации!')
+        bat.append('    exit /b 1')
+        bat.append(')')
+        bat.append('')
+
+        bat.append('echo Выгрузка конфигурации...')
+        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /DumpCfg%DUMP% /Out%LOG_DUMP%')
+        bat.append('if errorlevel 1 (')
+        bat.append('    echo ОШИБКА при выгрузке!')
+        bat.append('    exit /b 1')
+        bat.append(')')
+        bat.append('')
+        bat.append('exit /b 0')
+        bat.append('')
+
+        return '\n'.join(bat)
+        
+    def _build_repo_update_and_dump_cf_bat(self, executable: Path, database, dump_file: Path, log_update: Path, log_dump: Path) -> str:
+        """Генерирует BAT для обновления конфигурации из хранилища и выгрузки CF (Ctrl+F7 + F8)."""
+        base_param = self._build_base_param_for_bat(database)
+        credentials = self._build_credentials_for_bat(database)
+
+        bat = []
+        bat.append('chcp 65001 >nul')
+        bat.append('@echo off')
+        bat.append(f'set PLATFORM="{executable}"')
+        bat.append(f'set BASE={base_param}')
+        bat.append(f'set LOG_UPDATE="{log_update}"')
+        bat.append(f'set LOG_DUMP="{log_dump}"')
+        bat.append(f'set DUMP="{dump_file}"')
+        bat.append(f'set CREDENTIALS={credentials}')
+        bat.append('')
+
+        bat.append('echo Обновление конфигурации из хранилища...')
+        bat.append('%PLATFORM% DESIGNER %BASE% %CREDENTIALS% /ConfigurationRepositoryUpdateCfg -v -1 -revised -force /UpdateDBCfg /Out%LOG_UPDATE%')
+        bat.append('if errorlevel 1 (')
+        bat.append('    echo ОШИБКА при обновлении из хранилища!')
         bat.append('    exit /b 1')
         bat.append(')')
         bat.append('')
