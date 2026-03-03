@@ -1,9 +1,11 @@
 """Миксин для Designer bat-операций: UpdateDBCfg, DumpCfg, RepositoryUpdateCfg."""
 
+import os
 import re
 import tempfile
 import platform
 import subprocess
+import threading
 from pathlib import Path
 from datetime import datetime
 from PySide6.QtCore import QTimer
@@ -54,10 +56,8 @@ class DbDesignerMixin:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
 
-            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
             self.window.statusBar.showMessage(f"💾 Обновление конфигурации запущено (log: {log_file})")
-
-            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            self._run_bat_and_cleanup(bat_path)
             return True
 
         except Exception as e:
@@ -104,10 +104,8 @@ class DbDesignerMixin:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
 
-            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
             self.window.statusBar.showMessage(f"📥 Обновление из хранилища запущено (log: {log_file})")
-
-            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            self._run_bat_and_cleanup(bat_path)
             return True
 
         except Exception as e:
@@ -152,10 +150,8 @@ class DbDesignerMixin:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
 
-            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
             self.window.statusBar.showMessage(f"📦 Выгрузка CF запущена: {dump_file} (log: {log_file})")
-
-            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            self._run_bat_and_cleanup(bat_path)
             return True
 
         except Exception as e:
@@ -204,13 +200,8 @@ class DbDesignerMixin:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
 
-            # Запускаем без блокировки GUI (в отдельном процессе cmd)
-            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
-
             self.window.statusBar.showMessage(f"💾 Обновление и выгрузка CF запущена: {dump_file}")
-
-            # Убираем BAT позже (даём cmd время начать выполнение)
-            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            self._run_bat_and_cleanup(bat_path)
             return True
 
         except Exception as e:
@@ -261,10 +252,8 @@ class DbDesignerMixin:
                 bat_file.write(bat_text)
                 bat_path = bat_file.name
 
-            subprocess.Popen(["cmd", "/c", bat_path], shell=False)
             self.window.statusBar.showMessage(f"📥 Обновление из хранилища и выгрузка CF запущена (log: {log_update})")
-
-            QTimer.singleShot(60_000, lambda: self._cleanup_temp_file(bat_path))
+            self._run_bat_and_cleanup(bat_path)
             return True
 
         except Exception as e:
@@ -312,8 +301,24 @@ class DbDesignerMixin:
         return value
 
     # ------------------------------------------------------------------ #
-    #  BAT-билдеры                                                         #
+    #  BAT-билдеры и запуск                                                #
     # ------------------------------------------------------------------ #
+
+    def _run_bat_and_cleanup(self, bat_path: str):
+        """Запускает BAT-файл в фоновом потоке и удаляет его только после полного завершения."""
+        def worker():
+            try:
+                subprocess.run(["cmd", "/c", bat_path], shell=False)
+            finally:
+                try:
+                    if hasattr(self, '_cleanup_temp_file'):
+                        self._cleanup_temp_file(bat_path)
+                    elif os.path.exists(bat_path):
+                        os.remove(bat_path)
+                except Exception as e:
+                    print(f"Ошибка удаления временного файла {bat_path}: {e}")
+                    
+        threading.Thread(target=worker, daemon=True).start()
 
     def _build_update_db_cfg_bat(self, executable: Path, database, log_file: Path) -> str:
         """Генерирует BAT для Designer /UpdateDBCfg."""
