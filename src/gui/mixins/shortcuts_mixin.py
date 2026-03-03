@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtGui import QKeySequence, QShortcut
 from ..dialogs import DatabaseSettingsDialog
 from models.database import Database1C
@@ -50,7 +50,7 @@ class ShortcutsMixin:
         """Переключение темы приложения (светлая/темная)."""
         ThemeManager.toggle_theme(QApplication.instance())
         status = "Темная" if ThemeManager.is_dark() else "Светлая"
-        self.statusBar.showMessage(f"\U0001f3a8 Тема переключена: {status}", 2000)
+        self.statusBar.showMessage(f"\\U0001f3a8 Тема переключена: {status}", 2000)
 
     def handle_enter(self):
         """Обработка Enter: активация процесса или открытие базы."""
@@ -117,10 +117,21 @@ class ShortcutsMixin:
             self.actions.update_cfg_from_repository(db)
 
     def handle_f8_dump_cf(self):
-        """Обработка F8: выгрузка CF (/DumpCfg) для выбранной базы."""
+        """Обработка F8: выгрузка CF (/DumpCfg) для выбранной базы, с вопросом об обновлении из хранилища."""
         db = self.operations.get_selected_database(self.model, self.tree)
         if db:
-            self.actions.dump_cf(db)
+            reply = QMessageBox.question(
+                self,
+                "Выгрузка CF",
+                "Обновить конфигурацию из хранилища перед выгрузкой?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                self.actions.update_cfg_from_repository_and_dump_cf(db)
+            else:
+                self.actions.save_and_dump_cf(db)
 
     def handle_delete(self):
         """Обработка Del: закрытие процесса или удаление базы."""
