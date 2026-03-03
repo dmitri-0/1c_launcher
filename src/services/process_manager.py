@@ -110,42 +110,37 @@ class ProcessManager:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
-        # Для каждого PID находим главное окно (включая скрытые)
+        # Для каждого PID находим главное окно
         for pid, process_name in process_pids:
-            window_info = ProcessManager._find_main_window(pid, allow_hidden=True)
-            
-            # Получаем конфигурацию приложения
-            app_config = app_configs.get(process_name)
-            if not app_config:
-                continue
-                
-            icon = app_config.get("icon", "💻")
-            app_name = app_config.get("display_name", process_name)
-            
+            window_info = ProcessManager._find_main_window(pid)
             if window_info:
                 hwnd, title = window_info
+                
+                # Получаем конфигурацию приложения
+                app_config = app_configs.get(process_name)
+                if not app_config:
+                    continue
+                
+                icon = app_config.get("icon", "💻")
+                app_name = app_config.get("display_name", process_name)
+                
                 # Если заголовка нет - отображаем только имя приложения
                 if title:
                     display_name = f"{icon} {title}"
                 else:
                     display_name = f"{icon} {app_name}"
-            else:
-                # Если окон нет вообще, все равно считаем открытым (фоновый процесс)
-                hwnd = 0
-                display_name = f"{icon} {app_name}"
 
-            processes.append(Process1C(pid=pid, name=display_name, hwnd=hwnd))
+                processes.append(Process1C(pid=pid, name=display_name, hwnd=hwnd))
         
         return processes
     
     @staticmethod
-    def _find_main_window(pid: int, allow_hidden: bool = False) -> Optional[Tuple[int, str]]:
+    def _find_main_window(pid: int) -> Optional[Tuple[int, str]]:
         """
         Найти главное окно процесса
         
         Args:
             pid: ID процесса
-            allow_hidden: Искать ли скрытые окна
             
         Returns:
             (hwnd, title) или None, где title может быть пустой строкой
@@ -153,7 +148,7 @@ class ProcessManager:
         result = []
         
         def callback(hwnd, _):
-            if not allow_hidden and not win32gui.IsWindowVisible(hwnd):
+            if not win32gui.IsWindowVisible(hwnd):
                 return True
             
             _, window_pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -162,17 +157,13 @@ class ProcessManager:
                 # Проверяем, что это главное окно (не дочернее)
                 # Теперь принимаем окна даже без заголовка
                 if win32gui.GetParent(hwnd) == 0:
-                    is_visible = win32gui.IsWindowVisible(hwnd)
-                    result.append((hwnd, title, is_visible))
+                    result.append((hwnd, title))
             return True
         
         try:
             win32gui.EnumWindows(callback, None)
-            if not result:
-                return None
-            # Сортируем так, чтобы видимые окна (is_visible=True) были первыми
-            result.sort(key=lambda x: not x[2])
-            return result[0][0], result[0][1]
+            # Возвращаем первое найденное окно
+            return result[0] if result else None
         except Exception:
             return None
     
@@ -189,13 +180,7 @@ class ProcessManager:
         """
         try:
             hwnd = process.hwnd
-            if not hwnd:
-                return False
-                
-            # Если окно скрыто, показываем
-            if not win32gui.IsWindowVisible(hwnd):
-                win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                
+            
             # Если окно свёрнуто, разворачиваем
             if win32gui.IsIconic(hwnd):
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
@@ -227,7 +212,7 @@ class ProcessManager:
                 proc.kill()
             else:
                 # Корректное закрытие через окно (WM_CLOSE)
-                if process.hwnd and win32gui.IsWindow(process.hwnd):
+                if win32gui.IsWindow(process.hwnd):
                     win32gui.PostMessage(process.hwnd, win32con.WM_CLOSE, 0, 0)
                     
                     # Ожидаем, пока окно не исчезнет из списка приложений (Task Manager Apps)
