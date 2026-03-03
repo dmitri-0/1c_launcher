@@ -14,6 +14,19 @@ class TreeNavigationMixin:
             self.tree.setFirstColumnSpanned(folder_index.row(), folder_index.parent(), True)
             for proc_row in range(process_count):
                 self.tree.setFirstColumnSpanned(proc_row, folder_index, True)
+                
+            # Раскрываем узел "Открытые базы" после его перестройки
+            self.tree.expand(folder_index)
+            
+            # Если после закрытия процесса остались другие процессы,
+            # устанавливаем курсор на первый из них
+            if process_count > 0:
+                first_proc_index = self.model.index(0, 0, folder_index)
+                self.tree.setCurrentIndex(first_proc_index)
+                self.tree.scrollTo(first_proc_index)
+            else:
+                # Если процессов больше нет, устанавливаем курсор на саму папку "Открытые базы"
+                self.tree.setCurrentIndex(folder_index)
 
     def refresh_main_processes(self):
         """Обновление папки Основное с процессами."""
