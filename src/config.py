@@ -35,12 +35,6 @@ TRACKED_APPLICATIONS = [
         "launch_path": r"C:\Users\{username}\AppData\Local\Programs\Microsoft VS Code\Code.exe"
     },
     {
-        "process_name": "Flashnote-portable.exe",
-        "display_name": "Flashnote-portable",
-        "icon": "📋",
-        "launch_path": r"c:\ROOT\flashnote_portable_4.8\Flashnote-portable.exe"
-    },
-    {
         "process_name": "TOTALCMD.EXE",
         "display_name": "Total Commander",
         "icon": "💾",
