@@ -5,7 +5,7 @@ a = Analysis(
     ['src\\app.py'],
     pathex=[],
     binaries=[],
-    datas=[('c:\\ROOT\\CodeBase\\Py\\1c_launcher\\src\\resources\\app_icon.ico', '.'), ('c:\\ROOT\\CodeBase\\Py\\1c_launcher\\src\\resources\\Start-1C-Console.ps1', '.')],
+    datas=[('c:\\ROOT\\CodeBase\\Py\\1c_launcher\\src\\resources\\app_icon.ico', 'resources'), ('c:\\ROOT\\CodeBase\\Py\\1c_launcher\\src\\resources\\Start-1C-Console.ps1', 'resources')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
