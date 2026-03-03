@@ -30,9 +30,13 @@ class GlobalHotkeyManager:
     
     # Константы для глобальной горячей клавиши
     HOTKEY_ID = 1
-    # Ctrl (0x0002) + Alt (0x0001) + Shift (0x0004) = 0x0007
-    HOTKEY_MODIFIERS = 0x0002 | 0x0004
-    HOTKEY_VK = 0xC0  # VK_OEM_3 (клавиша тильды/ё)
+    # Ctrl (0x0002) | Alt (0x0001) | Shift (0x0004) = 0x0007
+    
+    # HOTKEY_MODIFIERS = 0x0001 | 0x0004
+    # HOTKEY_VK = 0xC0  # VK_OEM_3 (клавиша тильды/ё)
+
+    HOTKEY_MODIFIERS = 0x0001 # Alt
+    HOTKEY_VK = 0x44  # D
 
     def __init__(self, window):
         """Инициализация менеджера.
@@ -162,7 +166,7 @@ class GlobalHotkeyManager:
         key_names = {
             0x31: "1", 0x32: "2", 0x33: "3", 0x34: "4", 0x35: "5",
             0x36: "6", 0x37: "7", 0x38: "8", 0x39: "9", 0x30: "0",
-            0xC0: "Ё"
+            0xC0: "`", 0x44: "D"  
         }
         key = key_names.get(self.HOTKEY_VK, f"VK_{hex(self.HOTKEY_VK)}")
         
