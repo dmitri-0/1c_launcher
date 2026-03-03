@@ -14,6 +14,7 @@ from gui.mixins import (
     BasesDataMixin,
     TreeNavigationMixin,
     DbmMixin,
+    DigitNavigationMixin,
 )
 
 
@@ -24,6 +25,7 @@ class TreeWindow(
     BasesDataMixin,
     TreeNavigationMixin,
     DbmMixin,
+    DigitNavigationMixin,
     QMainWindow,
 ):
     """Основное окно с деревом баз 1С и управлением процессами."""
@@ -63,6 +65,11 @@ class TreeWindow(
         self.model.setHorizontalHeaderLabels(["Имя базы", "Connect", "Версия"])
         self.tree = QTreeView()
         self.tree.setModel(self.model)
+        
+        # Делегат для отображения номеров слева
+        from gui.tree.number_prefix_delegate import NumberPrefixDelegate
+        self.tree.setItemDelegateForColumn(0, NumberPrefixDelegate(self.tree))
+        
         self.tree.setEditTriggers(QTreeView.NoEditTriggers)
         self.tree.setSelectionBehavior(QTreeView.SelectRows)
         self.tree.setColumnWidth(0, 350)
@@ -95,6 +102,7 @@ class TreeWindow(
         self.main_processes_builder = MainProcessesTreeBuilder(self.model)
 
         self.setup_shortcuts()
+        self.setup_digit_navigation()
         self.hotkey_manager.register()
         self.load_bases()
         self.refresh_opened_bases()
