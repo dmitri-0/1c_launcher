@@ -2,7 +2,7 @@ from PySide6.QtCore import QTimer, QModelIndex
 from PySide6.QtGui import QKeySequence, QShortcut
 
 class DigitNavigationMixin:
-    DIGIT_NAV_TIMEOUT_MS = 500
+    DIGIT_NAV_TIMEOUT_MS = 300
 
     def setup_digit_navigation(self):
         self._digit_seq = []
