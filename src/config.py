@@ -38,7 +38,7 @@ TRACKED_APPLICATIONS = [
         "process_name": "Flashnote-portable.exe",
         "display_name": "Flashnote-portable",
         "icon": "📋",
-        "launch_path": r"C:\ROOT\flashnote_portable_4.8"
+        "launch_path": r"c:\ROOT\flashnote_portable_4.8\Flashnote-portable.exe"
     },
     {
         "process_name": "TOTALCMD.EXE",
