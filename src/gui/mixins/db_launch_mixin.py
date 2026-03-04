@@ -145,7 +145,7 @@ class DbLaunchMixin:
                 storage_path = (database.storage_path or '').strip()
                 usr_storage = (database.usr_storage or '').strip()
                 pwd_storage = (database.pwd_storage or '').strip()
-                if name_has_storage and storage_path and usr_storage and pwd_storage:
+                if storage_path and usr_storage and pwd_storage:
                     params.append(f'/ConfigurationRepositoryF "{storage_path}"')
                     params.append(f'/ConfigurationRepositoryN "{usr_storage}"')
                     params.append(f'/ConfigurationRepositoryP "{pwd_storage}"')

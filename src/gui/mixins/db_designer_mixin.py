@@ -265,20 +265,35 @@ class DbDesignerMixin:
     # ------------------------------------------------------------------ #
 
     def _build_base_stem(self, database) -> str:
-        """Формирует базовую часть имени файла: <ИМЯ_БАЗЫ>_<CONNECT>_<YYMMDD>_<HHMM>."""
+        """Формирует базовую часть имени файла: <ИМЯ_БАЗЫ>_<YYMMDD>_<HHMM>_<CONNECT>."""
+        import re  # Импортируем локально, если не подключено в начале файла
+        
         base_name = (database.name or "database").strip()
         safe_name = self._sanitize_filename(base_name)
         if not safe_name:
             safe_name = "database"
 
         connect = (database.connect or "").strip()
-        safe_connect = self._sanitize_filename(connect)
+        
+        # Очистка строки подключения 1С от лишних символов
+        if connect:
+            # 1. Удаляем ключи Srvr=, Ref=, File= (без учета регистра)
+            clean_connect = re.sub(r'(?i)(Srvr|Ref|File)=', '', connect)
+            # 2. Заменяем все спецсимволы, кавычки и двоеточия на подчеркивания (оставляем буквы, цифры и дефис)
+            clean_connect = re.sub(r'[^\w\-]', '_', clean_connect)
+            # 3. Убираем дублирующиеся подчеркивания и обрезаем их по краям
+            clean_connect = re.sub(r'_+', '_', clean_connect).strip('_')
+            
+            safe_connect = self._sanitize_filename(clean_connect)
+        else:
+            safe_connect = ""
 
         now = datetime.now()
         timestamp = now.strftime("%y%m%d_%H%M")
         
+        # Изменен порядок формирования финальной строки (сначала дата, потом подключение)
         if safe_connect:
-            return f"{safe_name}_{safe_connect}_{timestamp}"
+            return f"{safe_name}_{timestamp}_{safe_connect}"
         return f"{safe_name}_{timestamp}"
 
     def _build_cf_dump_path(self, database) -> Path:
@@ -507,5 +522,16 @@ class DbDesignerMixin:
             parts.append(f'/N"{usr}"')
         if pwd:
             parts.append(f'/P"{pwd}"')
+
+        # Расширение параметров для работы с хранилищем конфигурации
+        name_has_storage = bool(database.name) and ('хран' in database.name.casefold())
+        storage_path = (database.storage_path or '').strip()
+        usr_storage = (database.usr_storage or '').strip()
+        pwd_storage = (database.pwd_storage or '').strip()
+        
+        if storage_path and usr_storage and pwd_storage:
+            parts.append(f'/ConfigurationRepositoryF "{storage_path}"')
+            parts.append(f'/ConfigurationRepositoryN "{usr_storage}"')
+            parts.append(f'/ConfigurationRepositoryP "{pwd_storage}"')
 
         return ' '.join(parts)
