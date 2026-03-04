@@ -140,6 +140,16 @@ class DbLaunchMixin:
             if pwd:
                 params.append(f'/P"{pwd}"')
 
+            if mode == 'DESIGNER':
+                name_has_storage = bool(database.name) and ('хран' in database.name.casefold())
+                storage_path = (database.storage_path or '').strip()
+                usr_storage = (database.usr_storage or '').strip()
+                pwd_storage = (database.pwd_storage or '').strip()
+                if name_has_storage and storage_path and usr_storage and pwd_storage:
+                    params.append(f'/ConfigurationRepositoryF "{storage_path}"')
+                    params.append(f'/ConfigurationRepositoryN "{usr_storage}"')
+                    params.append(f'/ConfigurationRepositoryP "{pwd_storage}"')
+
             if mode == 'IR_TOOLS':
                 params.extend([
                     '/RunModeOrdinaryApplication',
