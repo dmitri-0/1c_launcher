@@ -46,6 +46,24 @@ TRACKED_APPLICATIONS = [
         "icon": "🔷",
         "launch_path": r"C:\Users\{username}\AppData\Local\Programs\Microsoft VS Code\Code.exe"
     },
+    {
+        "process_name": "msedge.exe",
+        "display_name": "MS Edge",
+        "icon": " ",
+        "launch_path": r"c:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+    },
+    {
+        "process_name": "Telegram.exe",
+        "display_name": "Telegram",
+        "icon": " ",
+        "launch_path": r"c:\Users\{username}\AppData\Roaming\Telegram Desktop\Telegram.exe"
+    },
+    {
+        "process_name": "thunderbird.exe",
+        "display_name": "Thunderbird",
+        "icon": " ",
+        "launch_path": r"c:\Program Files\Mozilla Thunderbird\thunderbird.exe"
+    },
 ]
 
 def get_launch_path(app_config):
