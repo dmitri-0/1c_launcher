@@ -265,15 +265,21 @@ class DbDesignerMixin:
     # ------------------------------------------------------------------ #
 
     def _build_base_stem(self, database) -> str:
-        """Формирует базовую часть имени файла: <ИМЯ_БАЗЫ>_<YYMMDD>_<HHMM>."""
+        """Формирует базовую часть имени файла: <ИМЯ_БАЗЫ>_<CONNECT>_<YYMMDD>_<HHMM>."""
         base_name = (database.name or "database").strip()
-        safe = self._sanitize_filename(base_name)
-        if not safe:
-            safe = "database"
+        safe_name = self._sanitize_filename(base_name)
+        if not safe_name:
+            safe_name = "database"
+
+        connect = (database.connect or "").strip()
+        safe_connect = self._sanitize_filename(connect)
 
         now = datetime.now()
         timestamp = now.strftime("%y%m%d_%H%M")
-        return f"{safe}_{timestamp}"
+        
+        if safe_connect:
+            return f"{safe_name}_{safe_connect}_{timestamp}"
+        return f"{safe_name}_{timestamp}"
 
     def _build_cf_dump_path(self, database) -> Path:
         """Формирует путь к .cf для выгрузки в формате <ИМЯ_БАЗЫ>_<YYMMDD>_<HHMM>.cf"""
