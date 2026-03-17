@@ -265,35 +265,46 @@ class DbDesignerMixin:
     # ------------------------------------------------------------------ #
 
     def _build_base_stem(self, database) -> str:
-        """Формирует базовую часть имени файла: <ИМЯ_БАЗЫ>_<YYMMDD>_<HHMM>_<CONNECT>."""
-        import re  # Импортируем локально, если не подключено в начале файла
+        """Формирует базовую часть имени файла: <REF>_<ИМЯ_БАЗЫ>_<YYMMDD>_<HHMM>."""
+        import re
+        from datetime import datetime
         
+        # 1. Получаем и очищаем ИМЯ_БАЗЫ
         base_name = (database.name or "database").strip()
         safe_name = self._sanitize_filename(base_name)
         if not safe_name:
             safe_name = "database"
 
+        # 2. Получаем строку подключения и извлекаем REF
         connect = (database.connect or "").strip()
+        safe_ref = ""
         
-        # Очистка строки подключения 1С от лишних символов
         if connect:
-            # 1. Удаляем ключи Srvr=, Ref=, File= (без учета регистра)
-            clean_connect = re.sub(r'(?i)(Srvr|Ref|File)=', '', connect)
-            # 2. Заменяем все спецсимволы, кавычки и двоеточия на подчеркивания (оставляем буквы, цифры и дефис)
-            clean_connect = re.sub(r'[^\w\-]', '_', clean_connect)
-            # 3. Убираем дублирующиеся подчеркивания и обрезаем их по краям
-            clean_connect = re.sub(r'_+', '_', clean_connect).strip('_')
+            # Ищем значения Ref (серверная) или File (файловая)
+            ref_match = re.search(r'(?i)Ref\s*=\s*["\']?([^;"\']+)["\']?', connect)
+            file_match = re.search(r'(?i)File\s*=\s*["\']?([^;"\']+)["\']?', connect)
             
-            safe_connect = self._sanitize_filename(clean_connect)
-        else:
-            safe_connect = ""
+            raw_ref = ""
+            if ref_match:
+                raw_ref = ref_match.group(1)
+            elif file_match:
+                raw_ref = file_match.group(1)
+                
+            if raw_ref:
+                # Очищаем извлеченное имя (Ref/File) от спецсимволов
+                clean_ref = re.sub(r'[^\w\-]', '_', raw_ref)
+                clean_ref = re.sub(r'_+', '_', clean_ref).strip('_')
+                safe_ref = self._sanitize_filename(clean_ref)
 
+        # 3. Формируем дату и время
         now = datetime.now()
-        timestamp = now.strftime("%y%m%d_%H%M")
+        timestamp = now.strftime("%y%m%d%H%M")
         
-        # Изменен порядок формирования финальной строки (сначала дата, потом подключение)
-        if safe_connect:
-            return f"{safe_name}_{timestamp}_{safe_connect}"
+        # 4. Собираем финальную строку в нужном порядке
+        if safe_ref:
+            return f"{safe_name}_{timestamp}_{safe_ref}"
+        
+        # Fallback, если строка подключения пустая или в ней нет Ref/File
         return f"{safe_name}_{timestamp}"
 
     def _build_cf_dump_path(self, database) -> Path:
