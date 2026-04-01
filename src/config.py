@@ -59,16 +59,16 @@ TRACKED_APPLICATIONS = [
         "launch_path": r"c:\Users\{username}\AppData\Roaming\Telegram Desktop\Telegram.exe"
     },
     {
-        "process_name": "max.exe",
-        "display_name": "Max",
-        "icon": " ",
-        "launch_path": r"c:\Program Files\MAX\max.exe"
-    },
-    {
         "process_name": "thunderbird.exe",
         "display_name": "Thunderbird",
         "icon": " ",
         "launch_path": r"c:\Program Files\Mozilla Thunderbird\thunderbird.exe"
+    },
+    {
+        "process_name": "max.exe",
+        "display_name": "Max",
+        "icon": " ",
+        "launch_path": r"c:\Program Files\MAX\max.exe"
     },
 ]
 
