@@ -8,13 +8,13 @@ IBASES_PATH = Path(os.getenv('USERPROFILE')) / 'AppData' / 'Roaming' / '1C' / '1
 ENCODING = 'utf-8-sig'
 
 # Путь к обработке инструментов ИР
-IR_TOOLS_PATH = r"c:\ROOT\CodeBase\1C\data\Tools\ИР_Портативный\ирПортативный.epf"
+IR_TOOLS_PATH = r"c:\ROOT\CodeBase\1C\Tools\ИР_Портативный\ирПортативный.epf"
 
 # Путь для выгрузки CF (папка)
 CF_DUMP_PATH = Path(r"D:\CF")
 
 # Путь к лог-файлу операций
-LOG_PATH = Path(r"D:\CF\log.txt")
+LOG_PATH = Path(r"D:\CF\Logs")
 
 # Пути для запуска DBM API
 DBM_PYTHON_EXE = r"c:\ROOT\CodeBase\Py\dbm_api\venv\Scripts\python.exe"
@@ -29,16 +29,22 @@ DBM_SCRIPT_PATH = r"c:\ROOT\CodeBase\Py\dbm_api\app.py"
 # }
 TRACKED_APPLICATIONS = [
     {
+        "process_name": "reasonix-desktop.exe",
+        "display_name": "Reasonix",
+        "icon": "❯_",
+        "launch_path": r"c:\ROOT\reasonix\run-latest.bat"  
+    },
+    {
         "process_name": "WindowsTerminal.exe",
         "display_name": "Terminal",
         "icon": "❯_",
         "launch_path": r"wt.exe"  # Windows Terminal можно запустить через wt.exe
     },
     {
-        "process_name": "TOTALCMD.EXE",
+        "process_name": "TOTALCMD64.EXE",
         "display_name": "Total Commander",
         "icon": "💾",
-        "launch_path": r"c:\ROOT\TCPU73\TOTALCMD.EXE"
+        "launch_path": r"c:\ROOT\TCPU75\TOTALCMD64.EXE"
     },
     {
         "process_name": "Code.exe",
@@ -64,12 +70,12 @@ TRACKED_APPLICATIONS = [
         "icon": " ",
         "launch_path": r"c:\Program Files\Mozilla Thunderbird\thunderbird.exe"
     },
-    {
-        "process_name": "max.exe",
-        "display_name": "Max",
-        "icon": " ",
-        "launch_path": r"c:\Program Files\MAX\max.exe"
-    },
+    # {
+    #     "process_name": "max.exe",
+    #     "display_name": "Max",
+    #     "icon": " ",
+    #     "launch_path": r"c:\Program Files\MAX\max.exe"
+    # },
 ]
 
 def get_launch_path(app_config):

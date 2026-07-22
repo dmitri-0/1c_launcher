@@ -117,11 +117,12 @@ class ProcessActions:
             
             # Запускаем приложение в отдельном процессе
             if os.name == 'nt':  # Windows
-                # Используем subprocess с DETACHED_PROCESS для полной отвязки
-                DETACHED_PROCESS = 0x00000008
+                # CREATE_NO_WINDOW — не показывает окно консоли для .bat/.cmd,
+                # для GUI-приложений (.exe) ведёт себя как обычный запуск.
+                # DETACHED_PROCESS не подходит для .bat-файлов (start не работает).
                 subprocess.Popen(
                     tracked_app.launch_path,
-                    creationflags=DETACHED_PROCESS,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
                     shell=True
                 )
             else:

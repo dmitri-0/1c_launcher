@@ -122,8 +122,17 @@ class DbLaunchMixin:
             params = [mode if mode != 'IR_TOOLS' else 'ENTERPRISE']
 
             if database.connect:
-                parsed_connect = self._parse_server_connect_string(database.connect)
-                params.append(f'/S"{parsed_connect}"')
+                # Файловая база (File=) -> /F, серверная (Srvr=) -> /S
+                if 'File=' in database.connect:
+                    file_match = re.search(r'File="([^"]*)"', database.connect)
+                    if file_match:
+                        file_path = file_match.group(1).rstrip('\\')
+                    else:
+                        file_path = database.connect.replace('File=', '').strip().rstrip(';').strip('"')
+                    params.append(f'/F"{file_path}"')
+                else:
+                    parsed_connect = self._parse_server_connect_string(database.connect)
+                    params.append(f'/S"{parsed_connect}"')
 
             usr = None
             pwd = None

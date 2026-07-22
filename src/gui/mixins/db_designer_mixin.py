@@ -302,7 +302,7 @@ class DbDesignerMixin:
         
         # 4. Собираем финальную строку в нужном порядке
         if safe_ref:
-            return f"{safe_name}_{timestamp}_{safe_ref}"
+            return f"{timestamp}_{safe_ref}_{safe_name}"
         
         # Fallback, если строка подключения пустая или в ней нет Ref/File
         return f"{safe_name}_{timestamp}"
