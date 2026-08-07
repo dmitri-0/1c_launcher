@@ -49,11 +49,17 @@ class TrayMixin:
 
     def quit_application(self):
         """Полный выход из приложения."""
+        save_note = getattr(self, "_save_current_note", None)
+        if save_note is not None:
+            save_note()  # сохранить редактируемую заметку (текст + позицию курсора)
         self.hotkey_manager.unregister()
         self.tray_icon.hide()
         QApplication.quit()
 
     def closeEvent(self, event):
         """При закрытии окна сворачиваем в трей вместо выхода."""
+        save_note = getattr(self, "_save_current_note", None)
+        if save_note is not None:
+            save_note()
         event.ignore()
         self.minimize_to_tray()

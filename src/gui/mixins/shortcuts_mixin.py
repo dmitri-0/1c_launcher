@@ -53,6 +53,14 @@ class ShortcutsMixin:
         if open_success:
             self.minimize_to_tray()
 
+    def handle_f4(self):
+        """Обработка F4: в узле заметок — preview/редактирование заметки,
+        иначе — открытие конфигуратора."""
+        notes = getattr(self, "notes_mixin", None)
+        if notes is not None and notes.handle_f4():
+            return
+        self.handle_f4_open()
+
     def handle_f5_ir_tools(self):
         """Обработка F5: запуск инструментов ИР для выбранной базы."""
         db = self.operations.get_selected_database(self.model, self.tree)

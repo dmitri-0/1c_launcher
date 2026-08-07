@@ -1,19 +1,17 @@
-"""Миксин «Заметки»: узел в дереве, редактор, контекстное меню, клавиши.
+"""Миксин «Заметки»: узел в дереве + панель preview/редактирования.
 
-Интеграция:
-- init_notes() — создаёт NotesManager и NotesTreeBuilder, вешает сигналы дерева;
-- ensure_notes_node() — пересобирает корневой узел «📝 Заметки» (идемпотентно);
-- load_bases() — кооперативный override: после перестройки дерева баз (модель
-  очищается TreeBuilder.build_tree) узел заметок пересобирается;
-- handle_enter() / handle_delete() — вызываются из ShortcutsMixin, возвращают True,
-  если выборка была по узлу заметок.
+Поток:
+- навигация по дереву заметок → в правой панели сразу показывается preview
+  активной заметки (режим по умолчанию);
+- F4 → режим редактирования (курсор в тексте, позиция запоминается в БД);
+- F4 ещё раз / переключение заметки / закрытие окна → текст и позиция курсора
+  сохраняются в notes.db.
 """
 
 from PySide6.QtWidgets import QMenu, QInputDialog
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QModelIndex
 
 from notes.notes_manager import NotesManager, Note
-from notes.notes_dialog import NotesDialog
 from notes.notes_tree_builder import NotesTreeBuilder, NOTES_ROOT_DATA
 
 
@@ -24,12 +22,14 @@ class NotesMixin:
         self.notes_mixin = self  # короткий алиас для обращений из других миксинов
         self.notes_manager = None
         self.notes_builder = None
+        self._active_note_id = None
         try:
             self.notes_manager = NotesManager()
             self.notes_builder = NotesTreeBuilder(self.model, self.notes_manager)
             self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
             self.tree.customContextMenuRequested.connect(self._on_notes_context_menu)
             self.tree.doubleClicked.connect(self._on_notes_double_clicked)
+            self.tree.selectionModel().currentChanged.connect(self._on_notes_selection_changed)
         except Exception as e:
             # Битый/недоступный notes.db не должен ронять лаунчер при старте
             print(f"Заметки отключены: {e}")
@@ -61,12 +61,26 @@ class NotesMixin:
                 return item
         return None
 
+    def _note_from_index(self, index: QModelIndex):
+        """Note из индекса (поднимаясь к корню) или None."""
+        if not index.isValid():
+            return None
+        item = self.model.itemFromIndex(index.siblingAtColumn(0) if index.column() != 0 else index)
+        while item is not None:
+            data = item.data(Qt.UserRole)
+            if data == NOTES_ROOT_DATA:
+                return None
+            if isinstance(data, Note):
+                return data
+            item = item.parent()
+        return None
+
     def _selected_note_item(self):
         """Возвращает (item, Note) для выбранного элемента заметок или (None, None)."""
         index = self.tree.currentIndex()
         if not index.isValid():
             return None, None
-        item = self.model.itemFromIndex(index)
+        item = self.model.itemFromIndex(index.siblingAtColumn(0) if index.column() != 0 else index)
         while item is not None:
             data = item.data(Qt.UserRole)
             if data == NOTES_ROOT_DATA:
@@ -76,12 +90,86 @@ class NotesMixin:
             item = item.parent()
         return None, None
 
-    def _is_notes_selected(self) -> bool:
-        return self._selected_note_item()[0] is not None
+    def _find_notes_item(self, note_id: int, parent=None):
+        """Ищет элемент дерева с Note.id == note_id (рекурсивно)."""
+        parent = parent if parent is not None else self.notes_root_item()
+        if parent is None:
+            return None
+        for i in range(parent.rowCount()):
+            item = parent.child(i, 0)
+            if item is None:
+                continue
+            data = item.data(Qt.UserRole)
+            if isinstance(data, Note) and data.id == note_id:
+                return item
+            found = self._find_notes_item(note_id, parent=item)
+            if found is not None:
+                return found
+        return None
+
+    # ── выбор заметки → preview в панели ─────────────────────────────
+    def _on_notes_selection_changed(self, current: QModelIndex, previous: QModelIndex):
+        self._save_current_note()
+        note = self._note_from_index(current)
+        if note is not None and not note.is_folder:
+            self._active_note_id = note.id
+            self.notes_panel.show_note(note)
+            self.notes_panel.show()
+        else:
+            # папка/корень/не-заметки — панель скрываем
+            self._active_note_id = None
+            self.notes_panel.hide()
+
+    def _save_current_note(self):
+        """Сохранить текст и позицию курсора активной заметки (если изменились).
+
+        Best-effort: ошибка БД не должна ронять closeEvent/переключение.
+        """
+        if self.notes_manager is None or self._active_note_id is None:
+            return
+        try:
+            note = self.notes_manager.get(self._active_note_id)
+            if note is None:
+                return
+            text = self.notes_panel.get_text()
+            caret = self.notes_panel.current_caret() if self.notes_panel.is_edit_mode() else note.caret
+            if text != note.note or caret != note.caret:
+                self.notes_manager.update(note.id, note=text, caret=caret)
+        except Exception as e:
+            print(f"Не удалось сохранить заметку: {e}")
+
+    def _toggle_notes_edit(self):
+        """F4: preview ⇄ редактирование (позиция курсора — из БД / в БД)."""
+        if self.notes_manager is None or self._active_note_id is None:
+            return
+        if self.notes_panel.is_edit_mode():
+            self._save_current_note()
+            self.notes_panel.enter_preview()
+        else:
+            note = self.notes_manager.get(self._active_note_id)
+            if note is None or note.is_folder:
+                return
+            self.notes_panel.enter_edit(caret=note.caret if note else 0)
+            self.notes_panel.focus_editor()
+
+    def handle_f4(self) -> bool:
+        """F4: в узле заметок — переключить preview/редактирование заметки.
+
+        Возвращает True, если F4 «съеден» узлом заметок (не должен открыть
+        конфигуратор). Папка/корень заметок — F4 не редактирует, но и не
+        передаётся дальше.
+        """
+        item, note = self._selected_note_item()
+        if item is None:
+            return False
+        if note is None or note.is_folder:
+            return True
+        self._toggle_notes_edit()
+        return True
 
     # ── действия (возвращают True, если обработали) ──────────────────
     def handle_enter(self) -> bool:
-        """Enter: заметка — открыть, папка/корень — раскрыть/свернуть."""
+        """Enter: заметка — показать preview/выбрать, папка/корень — раскрыть."""
         item, note = self._selected_note_item()
         if item is None:
             return False
@@ -98,23 +186,21 @@ class NotesMixin:
         if item is None or note is None:
             return False
         self.notes_manager.delete_to_trash(note.id)
+        self._active_note_id = None
+        self.notes_panel.hide()
         self.ensure_notes_node()
         self.statusBar.showMessage(f"🗑 «{note.name}» — в корзину", 3000)
         return True
 
     # ── операции с заметками ─────────────────────────────────────────
     def open_note(self, note_id: int):
-        if self.notes_manager is None:
+        """Выбрать заметку в дереве — в панели покажется её preview."""
+        item = self._find_notes_item(note_id)
+        if item is None:
             return
-        note = self.notes_manager.get(note_id)
-        if note is None:
-            return
-        dlg = NotesDialog(self, title=note.name, text=note.note, name=note.name)
-        if dlg.exec() == NotesDialog.Accepted:
-            title, text = dlg.get_data()
-            self.notes_manager.update(note.id, name=title or note.name, note=text)
-            self.ensure_notes_node()
-            self.statusBar.showMessage(f"✅ Заметка «{title or note.name}» сохранена", 3000)
+        index = item.index()
+        self.tree.setCurrentIndex(index)
+        self.tree.scrollTo(index)
 
     def _current_notes_parent_id(self) -> int:
         """Родитель для новой заметки: выбранная папка или родитель выбранной заметки."""
@@ -126,17 +212,20 @@ class NotesMixin:
     def new_note(self):
         if self.notes_manager is None:
             return
-        parent_id = self._current_notes_parent_id()
-        note_id = self.notes_manager.create("Новая заметка", pid=parent_id, type_=0)
+        note_id = self.notes_manager.create("Новая заметка", pid=self._current_notes_parent_id(), type_=0)
         self.ensure_notes_node()
         self.open_note(note_id)
+        # сразу в редактирование, курсор в начало
+        self._toggle_notes_edit()
 
     def new_folder(self):
         if self.notes_manager is None:
             return
-        parent_id = self._current_notes_parent_id()
-        self.notes_manager.create("Новая папка", pid=parent_id, type_=1)
+        folder_id = self.notes_manager.create("Новая папка", pid=self._current_notes_parent_id(), type_=1)
         self.ensure_notes_node()
+        item = self._find_notes_item(folder_id)
+        if item is not None:
+            self.tree.setCurrentIndex(item.index())  # вернуть выбор (панель скроется)
         self.statusBar.showMessage("📁 Папка создана", 2000)
 
     def rename_selected(self):
@@ -147,6 +236,7 @@ class NotesMixin:
         if ok and new_name.strip():
             self.notes_manager.update(note.id, name=new_name.strip())
             self.ensure_notes_node()
+            self.open_note(note.id)  # вернуть выбор, панель покажет preview
 
     # ── контекстное меню и даблклик ──────────────────────────────────
     def _on_notes_context_menu(self, pos):
@@ -171,9 +261,6 @@ class NotesMixin:
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _on_notes_double_clicked(self, index):
-        item = self.model.itemFromIndex(index)
-        if item is None:
-            return
-        data = item.data(Qt.UserRole)
-        if isinstance(data, Note) and not data.is_folder:
-            self.open_note(data.id)
+        note = self._note_from_index(index)
+        if note is not None and not note.is_folder:
+            self.open_note(note.id)

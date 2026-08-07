@@ -6,6 +6,7 @@
 
 from .notes_manager import NotesManager, Note, guess_note_format
 from .notes_dialog import NotesDialog
+from .notes_panel import NotesPanel
 from .notes_tree_builder import NotesTreeBuilder, NOTES_ROOT_DATA
 
 __all__ = [
@@ -13,6 +14,7 @@ __all__ = [
     "Note",
     "guess_note_format",
     "NotesDialog",
+    "NotesPanel",
     "NotesTreeBuilder",
     "NOTES_ROOT_DATA",
 ]

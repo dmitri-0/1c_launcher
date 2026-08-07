@@ -120,6 +120,107 @@ def test_schema_recreated(tmp_path):
         mgr.close()
 
 
+def test_update_caret_roundtrip(tmp_path):
+    """Позиция курсора хранится в БД и восстанавливается."""
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        note_id = mgr.create("Заметка", "текст")
+        assert mgr.get(note_id).caret == 0
+        mgr.update(note_id, caret=7)
+        assert mgr.get(note_id).caret == 7
+        mgr.update(note_id, note="новый текст", caret=3)
+        note = mgr.get(note_id)
+        assert note.note == "новый текст"
+        assert note.caret == 3
+    finally:
+        mgr.close()
+
+
+def test_migration_adds_caret_column(tmp_path):
+    """Старая БД (без колонки caret) при открытии мигрируется."""
+    import sqlite3
+
+    path = tmp_path / "notes.db"
+    con = sqlite3.connect(str(path))
+    con.execute(
+        "CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, pid INTEGER NOT NULL DEFAULT 0,"
+        " name TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', pos INTEGER NOT NULL DEFAULT 0,"
+        " created TEXT NOT NULL DEFAULT '', modified TEXT NOT NULL DEFAULT '',"
+        " trash INTEGER NOT NULL DEFAULT 0, type INTEGER NOT NULL DEFAULT 0)"
+    )
+    con.commit()
+    con.close()
+
+    mgr = NotesManager(path)
+    try:
+        cols = [row[1] for row in mgr._conn.execute("PRAGMA table_info(notes)").fetchall()]
+        assert "caret" in cols
+        note_id = mgr.create("После миграции")
+        assert mgr.get(note_id).caret == 0
+    finally:
+        mgr.close()
+
+
+# ── панель preview/редактирования ───────────────────────────────────
+def test_notes_panel_preview_default_and_edit(qt_app):
+    from notes.notes_panel import NotesPanel
+
+    raw = "# Заголовок\nтекст"
+    panel = NotesPanel()
+    note = Note(id=1, pid=0, name="Заметка.md", note=raw, pos=0,
+                created="", modified="", trash=0, type=0, caret=5)
+    panel.show_note(note)
+    assert panel.is_edit_mode() is False          # по умолчанию — preview
+    assert panel.body.isReadOnly() is True
+    assert panel.get_text() == raw                # сырой текст не теряется
+
+    panel.enter_edit(caret=5)
+    assert panel.is_edit_mode() is True
+    assert panel.body.isReadOnly() is False
+    assert panel.body.textCursor().position() == 5  # позиция курсора восстановлена
+
+    panel.body.insertPlainText("X")               # вставка в позицию курсора (5)
+    expected = raw[:5] + "X" + raw[5:]
+    assert panel.get_text() == expected
+    assert panel.current_caret() == 6
+
+    panel.enter_preview()
+    assert panel.get_text() == expected           # текст сохранился после выхода из режима
+    assert panel.body.isReadOnly() is True
+
+
+def test_notes_panel_switch_note_while_editing(qt_app):
+    """Регрессия: переключение заметки во время редактирования не должно
+    заносить текст старой заметки в новую (show_note выходит из режима правки)."""
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    note_a = Note(id=1, pid=0, name="A", note="текст A", pos=0,
+                  created="", modified="", trash=0, type=0, caret=0)
+    note_b = Note(id=2, pid=0, name="B", note="текст B", pos=1,
+                  created="", modified="", trash=0, type=0, caret=0)
+
+    panel.show_note(note_a)
+    panel.enter_edit(caret=0)
+    panel.body.setPlainText("отредактировано A")   # правим A
+
+    panel.show_note(note_b)                        # переключаемся на B
+    assert panel.is_edit_mode() is False           # вышли из режима правки
+    assert panel.get_text() == "текст B"           # НЕ текст A
+    assert panel.title_label.text() == "B"
+
+
+def test_notes_panel_plain_format_fallback(qt_app):
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    note = Note(id=2, pid=0, name="Просто заметка", note="без разметки", pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    assert panel.get_text() == "без разметки"
+    assert panel.is_edit_mode() is False
+
+
 # ── интеграция в GUI ─────────────────────────────────────────────────
 def test_builder_builds_tree_from_db(tmp_path):
     from PySide6.QtGui import QStandardItemModel
@@ -186,6 +287,9 @@ def test_notes_mixin_registered_in_tree_window():
     assert hasattr(TreeWindow, "ensure_notes_node")
     assert hasattr(TreeWindow, "handle_enter")
     assert hasattr(TreeWindow, "init_notes")
+    assert hasattr(TreeWindow, "_toggle_notes_edit")
+    assert hasattr(TreeWindow, "_save_current_note")
+    assert hasattr(TreeWindow, "handle_f4")
 
 
 def test_config_notes_path_default():

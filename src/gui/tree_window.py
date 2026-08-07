@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QTreeView, QVBoxLayout, QWidget,
-    QStatusBar,
+    QMainWindow, QTreeView, QVBoxLayout, QWidget, QStatusBar, QSplitter,
 )
 from PySide6.QtGui import QStandardItemModel, QAction
+from PySide6.QtCore import Qt
 import threading
 
 from gui.hotkeys import GlobalHotkeyManager
@@ -67,9 +67,19 @@ class TreeWindow(
         layout = QVBoxLayout()
         layout.addWidget(self.tree)
 
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+        # Панель заметок (справа): preview активной заметки / редактирование (F4)
+        from notes.notes_panel import NotesPanel
+        self.notes_panel = NotesPanel()
+        self.notes_panel.hide()
+
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.addWidget(self.tree)
+        self.splitter.addWidget(self.notes_panel)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+        self.splitter.setSizes([620, 380])
+
+        self.setCentralWidget(self.splitter)
 
         # Данные
         self.all_bases = []
@@ -147,7 +157,7 @@ class TreeWindow(
 
         a = QAction("Открыть конфигуратор\t[F4 / Shift+Enter]", self)
         a.setShortcuts(["F4", "Shift+Return"])
-        a.triggered.connect(self.handle_f4_open)
+        a.triggered.connect(self.handle_f4)
         menu_actions.addAction(a)
 
         a = QAction("Инструменты ИР\t[F5]", self)

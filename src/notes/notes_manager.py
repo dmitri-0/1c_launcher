@@ -33,7 +33,8 @@ class Note:
     created: str
     modified: str
     trash: int
-    type: int  # 0 = заметка, 1 = папка
+    type: int   # 0 = заметка, 1 = папка
+    caret: int = 0  # позиция курсора (восстанавливается при входе в редактирование)
 
     @property
     def is_folder(self) -> bool:
@@ -97,11 +98,17 @@ class NotesManager:
                     created TEXT NOT NULL DEFAULT '',
                     modified TEXT NOT NULL DEFAULT '',
                     trash INTEGER NOT NULL DEFAULT 0,
-                    type INTEGER NOT NULL DEFAULT 0
+                    type INTEGER NOT NULL DEFAULT 0,
+                    caret INTEGER NOT NULL DEFAULT 0
                 )"""
             )
+            # Миграция: старые БД без колонки caret (позиция курсора)
+            cols = [row[1] for row in self._conn.execute("PRAGMA table_info(notes)").fetchall()]
+            if "caret" not in cols:
+                self._conn.execute("ALTER TABLE notes ADD COLUMN caret INTEGER NOT NULL DEFAULT 0")
             self._conn.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
-            self._conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '1')")
+            self._conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '2')")
+            self._conn.execute("UPDATE meta SET value = '2' WHERE key = 'schema_version'")
 
     # ── чтение ──────────────────────────────────────────────────────
     def load_all(self, include_trash: bool = False) -> List[Note]:
@@ -124,13 +131,14 @@ class NotesManager:
         now = _now()
         with self._lock, self._conn:
             cur = self._conn.execute(
-                "INSERT INTO notes(pid, name, note, pos, created, modified, trash, type) "
-                "VALUES(?, ?, ?, 0, ?, ?, 0, ?)",
+                "INSERT INTO notes(pid, name, note, pos, created, modified, trash, type, caret) "
+                "VALUES(?, ?, ?, 0, ?, ?, 0, ?, 0)",
                 (pid, name, note, now, now, type_),
             )
             return int(cur.lastrowid)
 
-    def update(self, note_id: int, name: Optional[str] = None, note: Optional[str] = None) -> None:
+    def update(self, note_id: int, name: Optional[str] = None, note: Optional[str] = None,
+               caret: Optional[int] = None) -> None:
         sets, params = [], []
         if name is not None:
             sets.append("name = ?")
@@ -138,6 +146,9 @@ class NotesManager:
         if note is not None:
             sets.append("note = ?")
             params.append(note)
+        if caret is not None:
+            sets.append("caret = ?")
+            params.append(caret)
         if not sets:
             return
         sets.append("modified = ?")
