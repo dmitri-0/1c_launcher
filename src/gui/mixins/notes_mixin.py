@@ -8,8 +8,11 @@
   сохраняются в notes.db.
 """
 
+from datetime import datetime
+
 from PySide6.QtWidgets import QMenu, QInputDialog
 from PySide6.QtCore import Qt, QModelIndex
+from PySide6.QtGui import QKeySequence, QShortcut
 
 from config import NOTES_PANEL_WIDTH_PERCENT
 from notes.notes_manager import NotesManager, Note
@@ -31,6 +34,9 @@ class NotesMixin:
             self.tree.customContextMenuRequested.connect(self._on_notes_context_menu)
             self.tree.doubleClicked.connect(self._on_notes_double_clicked)
             self.tree.selectionModel().currentChanged.connect(self._on_notes_selection_changed)
+            self.notes_panel.image_handler = self._save_note_image
+            self._focus_switch = QShortcut(QKeySequence("Ctrl+Tab"), self)
+            self._focus_switch.activated.connect(self._switch_focus)
         except Exception as e:
             # Битый/недоступный notes.db не должен ронять лаунчер при старте
             print(f"Заметки отключены: {e}")
@@ -107,6 +113,37 @@ class NotesMixin:
             if found is not None:
                 return found
         return None
+
+    def _save_note_image(self, image) -> str:
+        """Сохранить вставленную из буфера картинку и вернуть placeholder (md).
+
+        Файл кладётся рядом с notes.db: <db_dir>/images/note_<id>/img_<ts>.png.
+        Preview-движок md рендерит placeholder как изображение.
+        """
+        if self.notes_manager is None or self._active_note_id is None:
+            return ""
+        try:
+            db_dir = self.notes_manager.db_path.parent
+            img_dir = db_dir / "notes_images" / f"note_{self._active_note_id}"
+            img_dir.mkdir(parents=True, exist_ok=True)
+            fname = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            path = img_dir / fname
+            image.save(str(path), "PNG")
+            return f"![{fname}]({path.as_posix()})"
+        except Exception as e:
+            print(f"Не удалось сохранить картинку: {e}")
+            return ""
+
+    def _switch_focus(self):
+        """Ctrl+Tab: переключение фокуса между деревом и панелью заметок."""
+        if self.notes_manager is None:
+            return
+        if self.notes_panel.isHidden():
+            return
+        if self.tree.hasFocus() or self.splitter.hasFocus():
+            self.notes_panel.focus_editor()
+        else:
+            self.tree.setFocus()
 
     # ── выбор заметки → preview в панели ─────────────────────────────
     def _show_notes_panel(self):

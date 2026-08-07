@@ -305,6 +305,82 @@ def test_config_notes_panel_width():
     assert percent == settings["notes"].get("panel_width_percent", 80)
 
 
+# ── движки рендеринга ───────────────────────────────────────────────
+def test_engines_detect_and_fallback():
+    from notes.engines import detect_engine, get_engine
+    from notes.engines.plain_engine import PlainTextEngine
+    from notes.engines.md_engine import MarkdownEngine
+
+    assert detect_engine("todo.md", "текст") == MarkdownEngine.name
+    assert detect_engine("Заметка", "# Заголовок") == MarkdownEngine.name
+    assert detect_engine("Заметка", "просто текст") == PlainTextEngine.name
+    assert isinstance(get_engine("md"), MarkdownEngine)
+    assert isinstance(get_engine("неизвестный"), PlainTextEngine)   # fallback
+    assert isinstance(get_engine(""), PlainTextEngine)
+    assert get_engine("md").supports_editing() is True
+
+
+def test_engines_render(qt_app):
+    from notes.engines import get_engine
+    from PySide6.QtWidgets import QTextEdit
+
+    widget = QTextEdit()
+    get_engine("plain").render(widget, "просто текст", "x")
+    assert widget.toPlainText() == "просто текст"
+    get_engine("md").render(widget, "# Заголовок", "x.md")
+    assert "Заголовок" in widget.toPlainText()
+
+
+def test_notes_panel_zoom_buttons(qt_app):
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    note = Note(id=1, pid=0, name="Z", note="текст", pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    base = panel._base_pt
+    assert panel._zoom == 0
+
+    panel.change_zoom(1)
+    assert panel._zoom == 1
+    assert panel.body.font().pointSizeF() > base          # шрифт вырос
+
+    panel.change_zoom(-2)
+    assert panel._zoom == -1                               # 1 - 2 = -1 (ступени непрерывны)
+    panel.change_zoom(0, reset=True)
+    assert panel._zoom == 0
+    assert panel.body.font().pointSizeF() == base          # сброс вернул базовый размер
+
+    # в редактировании zoom тоже меняет шрифт, текст не теряется
+    panel.enter_edit(caret=0)
+    panel.change_zoom(2)
+    assert panel.is_edit_mode()
+    assert panel.get_text() == "текст"
+
+
+def test_notes_panel_image_paste_placeholder(qt_app):
+    from notes.notes_panel import NotesPanel
+    from PySide6.QtGui import QImage
+    from PySide6.QtCore import QMimeData
+
+    saved = []
+    panel = NotesPanel()
+    panel.image_handler = lambda img: saved.append(img) or "[IMG]"
+    panel.enter_edit(caret=0)
+    mime = QMimeData()
+    mime.setImageData(QImage(8, 8, QImage.Format.Format_ARGB32))
+    panel.body.insertFromMimeData(mime)
+    assert saved, "image_handler должен был вызваться"
+    assert panel.body.toPlainText() == "[IMG]"             # placeholder вместо картинки
+
+
+def test_mixin_image_handler_wired():
+    from gui.mixins.notes_mixin import NotesMixin
+
+    assert hasattr(NotesMixin, "_save_note_image")
+    assert hasattr(NotesMixin, "_switch_focus")
+
+
 # ── интеграция в GUI ─────────────────────────────────────────────────
 def test_builder_builds_tree_from_db(tmp_path):
     from PySide6.QtGui import QStandardItemModel

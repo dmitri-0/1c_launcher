@@ -52,26 +52,14 @@ def _default_db_path() -> Path:
     return Path(__file__).resolve().parent / "notes.db"
 
 
-# Маркеры Markdown для эвристики (на случай, если имя без расширения .md)
-_MD_MARKERS = ("# ", "## ", "### ", "- ", "* ", "> ", "```", "**", "`", "- [", "1. ", "| ")
-
-
 def guess_note_format(name: str, text: str) -> str:
-    """Определяет формат заметки для preview.
+    """Определяет формат заметки для preview (устаревшая обёртка).
 
-    Пока движок понимает только Markdown; если формат не распознан —
-    заметка показывается как plain text (в будущем добавим другие форматы).
+    Логика вынесена в notes.engines.detect_engine — здесь оставлена для
+    совместимости API/тестов.
     """
-    if name.lower().endswith(".md") or name.lower().endswith(".markdown"):
-        return "md"
-    for line in text[:4000].splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if any(stripped.startswith(marker) for marker in _MD_MARKERS):
-            return "md"
-        break  # проверяем только первую непустую строку
-    return "plain"
+    from notes.engines import detect_engine
+    return detect_engine(name, text)
 
 
 class NotesManager:
