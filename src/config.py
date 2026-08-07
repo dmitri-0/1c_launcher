@@ -43,6 +43,9 @@ def _default_settings() -> dict:
             "modifiers": 0x0001,  # MOD_ALT
             "vk": 0x44,           # D
         },
+        "notes": {
+            "path": "",  # пусто = notes.db рядом с exe
+        },
         # Отслеживаемые приложения для узла "Основное"
         "tracked_applications": [
             {
@@ -138,7 +141,7 @@ def _parse_modifiers(value) -> int:
             if bit:
                 result |= bit
             else:
-                print(f"⚠️ {CONFIG_FILE_NAME}: неизвестный модификатор '{part}' — проигнорирован")
+                print(f"{CONFIG_FILE_NAME}: неизвестный модификатор '{part}' — проигнорирован")
         return result
     return 0x0001
 
@@ -150,7 +153,7 @@ def _parse_vk(value) -> int:
     try:
         return int(str(value), 0)
     except ValueError:
-        print(f"⚠️ {CONFIG_FILE_NAME}: неверный VK '{value}' — используется 0x44 (D)")
+        print(f"{CONFIG_FILE_NAME}: неверный VK '{value}' — используется 0x44 (D)")
         return 0x44
 
 
@@ -176,6 +179,10 @@ def _merge(settings: dict, data: dict) -> None:
             settings["hotkey"]["modifiers"] = _parse_modifiers(hotkey["modifiers"])
         if "vk" in hotkey:
             settings["hotkey"]["vk"] = _parse_vk(hotkey["vk"])
+
+    notes = data.get("notes")
+    if isinstance(notes, dict) and "path" in notes:
+        settings["notes"]["path"] = str(notes["path"])
 
     apps = data.get("tracked_applications")
     if isinstance(apps, list) and apps:
@@ -210,16 +217,16 @@ def load_settings(config_path: Optional[os.PathLike] = None) -> dict:
         return settings
 
     if tomllib is None:
-        print("⚠️ Для чтения launcher.toml нужен Python 3.11+ (tomllib) — используются встроенные настройки.")
+        print("Для чтения launcher.toml нужен Python 3.11+ (tomllib) — используются встроенные настройки.")
         return settings
 
     try:
         with open(path, "rb") as f:
             data = tomllib.load(f)
         _merge(settings, data)
-        print(f"✅ Настройки загружены из: {path}")
+        print(f"Настройки загружены из: {path}")
     except Exception as e:
-        print(f"⚠️ Ошибка чтения настроек {path}: {e} — используются встроенные значения")
+        print(f"Ошибка чтения настроек {path}: {e} — используются встроенные значения")
     return settings
 
 
@@ -252,6 +259,9 @@ DBM_API_DIR = _SETTINGS["dbm_api_dir"]
 # Настраивается в launcher.toml ([hotkey]) — читается динамически.
 GLOBAL_HOTKEY_MODIFIERS = _SETTINGS["hotkey"]["modifiers"]
 GLOBAL_HOTKEY_VK = _SETTINGS["hotkey"]["vk"]
+
+# Путь к БД заметок (SQLite). Пустая строка = notes.db рядом с exe/модулем.
+NOTES_PATH = _SETTINGS["notes"].get("path", "")
 
 # Отслеживаемые приложения для узла "Основное"
 TRACKED_APPLICATIONS = _SETTINGS["tracked_applications"]

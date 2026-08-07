@@ -42,6 +42,10 @@ modifiers = 'Alt'
 #   0x44 = D, 0x43 = C, 0x31 = 1, 0x70 = F1, 0x71 = F2 и т.д.
 vk = 0x44
 
+[notes]
+# Путь к БД заметок (SQLite). Пустая строка = notes.db рядом с exe (портативно).
+path = ''
+
 # Отслеживаемые приложения для узла «Основное» (меняется без пересборки)
 [[tracked_applications]]
 process_name = 'reasonix-desktop.exe'

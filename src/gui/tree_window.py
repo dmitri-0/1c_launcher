@@ -18,6 +18,7 @@ from gui.mixins import (
     DigitNavigationMixin,
     ApacheManagerMixin,
     SnapshotsUpdateMixin,
+    NotesMixin,
 )
 from models.database import Database1C
 from gui.dialogs import DatabaseSettingsDialog
@@ -25,6 +26,7 @@ from services.web_publisher import is_admin
 
 
 class TreeWindow(
+    NotesMixin,
     TrayMixin,
     ShortcutsMixin,
     IbasesEditorMixin,
@@ -91,6 +93,10 @@ class TreeWindow(
         self.tree_builder = TreeBuilder(self.model)
         self.opened_bases_builder = OpenedBasesTreeBuilder(self.model)
         self.main_processes_builder = MainProcessesTreeBuilder(self.model)
+
+        # Заметки: менеджер + построитель узла «📝 Заметки» (до load_bases,
+        # т.к. load_bases пересобирает узел заметок после очистки модели)
+        self.init_notes()
 
         self.setup_menu()
         self.setup_digit_navigation()
@@ -285,6 +291,18 @@ class TreeWindow(
         a = QAction("Очистить кеш / Принудительно закрыть\t[Shift+Del]", self)
         a.setShortcut("Shift+Del")
         a.triggered.connect(self.handle_shift_delete)
+        menu_edit.addAction(a)
+
+        menu_edit.addSeparator()
+
+        a = QAction("Новая заметка\t[Ctrl+N]", self)
+        a.setShortcut("Ctrl+N")
+        a.triggered.connect(lambda: self.notes_mixin.new_note())
+        menu_edit.addAction(a)
+
+        a = QAction("Переименовать заметку\t[F2]", self)
+        a.setShortcut("F2")
+        a.triggered.connect(lambda: self.notes_mixin.rename_selected())
         menu_edit.addAction(a)
 
         # ── Вид ───────────────────────────────────────────────

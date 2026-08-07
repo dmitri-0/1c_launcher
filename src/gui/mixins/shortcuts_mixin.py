@@ -15,7 +15,10 @@ class ShortcutsMixin:
         self.statusBar.showMessage(f"\\U0001f3a8 Тема переключена: {status}", 2000)
 
     def handle_enter(self):
-        """Обработка Enter: активация процесса или чистый запуск базы (без отладки)."""
+        """Обработка Enter: заметка — открыть; активация процесса или чистый запуск базы."""
+        notes = getattr(self, "notes_mixin", None)
+        if notes is not None and notes.handle_enter():
+            return
         process = self.process_actions.get_selected_process()
         if process:
             selected_index = self.tree.currentIndex()
@@ -108,7 +111,10 @@ class ShortcutsMixin:
             self.actions.unpublish_database(db)
 
     def handle_delete(self):
-        """Обработка Del: закрытие процесса или удаление базы."""
+        """Обработка Del: заметка — в корзину; закрытие процесса или удаление базы."""
+        notes = getattr(self, "notes_mixin", None)
+        if notes is not None and notes.handle_delete():
+            return
         process = self.process_actions.get_selected_process()
         if process:
             self.process_actions.close_process(process, force=False)
