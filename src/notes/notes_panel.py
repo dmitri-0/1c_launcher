@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QToolButton, QComboBox,
 )
 from PySide6.QtGui import QTextCursor, QImage, QFont
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import Qt, QEvent, QTimer
 
 from notes.engines import detect_engine, get_engine, PreviewEngine
 from notes.notes_document import NoteTextDocument
@@ -120,6 +120,11 @@ class NotesPanel(QWidget):
         self._highlighter = None
         self._base_pt = self.body.font().pointSizeF() or 11.0
         self._method_lines: list = []  # номера строк методов (для навигатора)
+        # ── запоминание позиции скролла ──
+        self.scroll_key = None        # ключ (напр. "note:12" / "path:C:\\...")
+        self.scroll_load = None       # callable(key) -> int (px)
+        self.scroll_save = None       # callable(key, pos)
+        self._pending_scroll = None   # позиция для отложенного восстановления
 
     # ── вставка картинки из буфера ──────────────────────────────────
     @property
@@ -185,6 +190,7 @@ class NotesPanel(QWidget):
         self.title_label.setText(note.name)
         self._edit = False
         self._render_preview()
+        self._restore_scroll()
 
     def show_content(self, name: str, text: str, binary: bool = False, engine_name: str = None):
         """Показать произвольное содержимое (файл каталога) в preview.
@@ -206,6 +212,7 @@ class NotesPanel(QWidget):
             )
         else:
             self._render_preview(engine=get_engine(engine_name) if engine_name else None)
+        self._restore_scroll()
 
     def clear(self):
         """Пустое состояние (ничего не выбрано)."""
@@ -299,6 +306,7 @@ class NotesPanel(QWidget):
         cursor.setPosition(min(max(caret, 0), len(self._raw)))
         self.body.setTextCursor(cursor)
         self._update_methods_navigator()  # навигатор работает и в редактировании
+        self._restore_scroll()            # и скролл тоже
 
     def is_edit_mode(self) -> bool:
         return self._edit
@@ -313,6 +321,38 @@ class NotesPanel(QWidget):
         if not self._edit:
             return 0
         return self.body.textCursor().position()
+
+    # ── позиция скролла ─────────────────────────────────────────────
+    def current_scroll(self) -> int:
+        """Текущая позиция вертикального скролла (px)."""
+        return self.body.verticalScrollBar().value()
+
+    def _restore_scroll(self):
+        """Вернуть сохранённую позицию скролла после рендера.
+
+        Диапазон скроллбара валиден только после раскладки документа, поэтому
+        восстановление откладываем на следующий цикл событий (singleShot).
+        Токен key защищает от быстрого переключения заметок: если к моменту
+        срабатывания панель показывает уже другой контент — не применяем.
+        """
+        key = self.scroll_key
+        if not key or self.scroll_load is None:
+            return
+        try:
+            pos = self.scroll_load(key)
+        except Exception:
+            return
+        if pos <= 0:
+            return
+        self._pending_scroll = pos
+
+        def apply(k):
+            if k == self.scroll_key and self._pending_scroll is not None:
+                bar = self.body.verticalScrollBar()
+                bar.setValue(min(self._pending_scroll, bar.maximum()))
+                self._pending_scroll = None
+
+        QTimer.singleShot(0, lambda: apply(key))
 
     def focus_editor(self):
         self.body.setFocus()

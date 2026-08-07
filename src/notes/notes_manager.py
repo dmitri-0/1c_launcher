@@ -120,14 +120,56 @@ class NotesManager:
     def __init__(self, db_path: Optional[Path] = None):
         explicit = bool(db_path or NOTES_PATH)
         path = Path(db_path) if db_path else (Path(NOTES_PATH) if NOTES_PATH else _default_db_path())
+        # Путь может указывать на КАТАЛОГ (например "...\1c_launcher\") —
+        # тогда берём notes.db внутри него (частый случай: пользователь
+        # указывает «куда положить БД», а не сам файл).
+        if path.is_dir():
+            path = path / "notes.db"
         if not explicit:
             # дефолтный путь: один раз переносим данные старой БД (если была)
             migrate_legacy_db(path)
         self.db_path = path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(path))
-        self._conn.row_factory = sqlite3.Row
+        self.init_error = None  # если явный путь не открылся — причина (заметки не отключаем)
         self._lock = threading.Lock()
+        self._conn = None
+        try:
+            self._open(path)
+        except Exception as e:
+            # Битый/занятый файл по ЯВНОМУ пути: не отключаем заметки целиком —
+            # откатываемся на дефолтный путь (данные в нём появятся заново).
+            if path != _default_db_path():
+                try:
+                    migrate_legacy_db(_default_db_path())  # перенести старые данные
+                    self._open(_default_db_path())
+                    self.init_error = (
+                        f"не удалось открыть {path} ({e}); используется "
+                        f"{_default_db_path()}"
+                    )
+                    return
+                except Exception:
+                    pass  # и дефолтный не открылся — ниже пробрасываем исходную ошибку
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
+            raise
+
+    def _open(self, path: Path):
+        """Открыть БД и привести схему к актуальной (timeout против блокировок)."""
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # timeout=15 — второй экземпляр лаунчера ждёт лок до 15 с, а не
+        # падает «database is locked» (заметки «отключались» при запуске
+        # двух копий/остаточного процесса).
+        self._conn = sqlite3.connect(str(path), timeout=15.0)
+        self._conn.row_factory = sqlite3.Row
         self._ensure_schema()
 
     def _ensure_schema(self):
@@ -240,6 +282,9 @@ class NotesManager:
             self._conn.executemany("DELETE FROM notes WHERE id = ?", [(i,) for i in ids])
             # не оставлять осиротевшие blob-картинки удалённых заметок
             self._conn.executemany("DELETE FROM images WHERE note_id = ?", [(i,) for i in ids])
+            # и их скролл-позиции (caret у заметок — колонка, чистить нечего)
+            self._conn.executemany(
+                "DELETE FROM meta WHERE key = ?", [(f"scroll:{i}",) for i in ids])
 
     def _collect_subtree(self, note_id: int) -> List[int]:
         with self._lock:
@@ -289,6 +334,40 @@ class NotesManager:
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, str(int(pos))),
             )
+
+    # ── позиция скролла (заметка / файл каталога) ───────────────────
+    def _get_meta_int(self, key: str) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        try:
+            return int(row["value"]) if row else 0
+        except (TypeError, ValueError):
+            return 0
+
+    def _set_meta_int(self, key: str, pos: int) -> None:
+        if pos <= 0:
+            return
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO meta(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(int(pos))),
+            )
+
+    def get_note_scroll(self, note_id: int) -> int:
+        """Сохранённая позиция вертикального скролла заметки (px) или 0."""
+        return self._get_meta_int(f"scroll:{note_id}")
+
+    def set_note_scroll(self, note_id: int, pos: int) -> None:
+        self._set_meta_int(f"scroll:{note_id}", pos)
+
+    def get_path_scroll(self, path: str) -> int:
+        """Сохранённая позиция скролла файла каталога (px) или 0."""
+        return self._get_meta_int(f"scroll_path:{path}")
+
+    def set_path_scroll(self, path: str, pos: int) -> None:
+        self._set_meta_int(f"scroll_path:{path}", pos)
 
     def close(self):
         with self._lock:

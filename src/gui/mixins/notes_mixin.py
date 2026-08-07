@@ -38,6 +38,12 @@ class NotesMixin:
             self.notes_panel.resource_loader = self.notes_manager.get_image
             self._focus_switch = QShortcut(QKeySequence("Ctrl+Tab"), self)
             self._focus_switch.activated.connect(self._switch_focus)
+            # Явный путь не открылся (битый/занятый файл) — заметки работают
+            # на дефолтном пути; показываем причину, но НЕ отключаем раздел.
+            if getattr(self.notes_manager, "init_error", None):
+                self.statusBar.showMessage(
+                    f"⚠️ Заметки: {self.notes_manager.init_error}", 6000
+                )
         except Exception as e:
             # Битый/недоступный notes.db не должен ронять лаунчер при старте
             print(f"Заметки отключены: {e}")
@@ -181,6 +187,15 @@ class NotesMixin:
         note = self._note_from_index(current)
         if note is not None and not note.is_folder:
             self._active_note_id = note.id
+            mgr = self.notes_manager
+            note_id = note.id
+            # ключ панели — токен восстановления; БД получает голый id,
+            # а не строку с префиксом (иначе расходятся пространства ключей)
+            self._bind_scroll(
+                f"note:{note_id}",
+                lambda k: mgr.get_note_scroll(note_id),
+                lambda k, pos: mgr.set_note_scroll(note_id, pos),
+            )
             self.notes_panel.show_note(note)
             self._show_notes_panel()
         else:
@@ -198,11 +213,27 @@ class NotesMixin:
         take = getattr(self, "_catalog_take_panel", None)
         return bool(take and take())
 
+    def _save_current_scroll(self):
+        """Сохранить позицию скролла того, что показывает панель (заметка/файл)."""
+        panel = self.notes_panel
+        if panel.scroll_key and panel.scroll_save:
+            try:
+                panel.scroll_save(panel.scroll_key, panel.current_scroll())
+            except Exception:
+                pass  # best-effort, как остальные сохранения
+
+    def _bind_scroll(self, key: str, load, save):
+        """Привязать к панели ключ и функции сохранения/восстановления скролла."""
+        self.notes_panel.scroll_key = key
+        self.notes_panel.scroll_load = load
+        self.notes_panel.scroll_save = save
+
     def _save_current_note(self):
-        """Сохранить текст и позицию курсора активной заметки (если изменились).
+        """Сохранить текст, позицию курсора и скролл активной заметки.
 
         Best-effort: ошибка БД не должна ронять closeEvent/переключение.
         """
+        self._save_current_scroll()
         if self.notes_manager is None or self._active_note_id is None:
             return
         try:

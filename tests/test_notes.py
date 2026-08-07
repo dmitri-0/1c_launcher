@@ -623,3 +623,95 @@ def test_xml_engine_pretty_and_detection(qt_app):
                 created="", modified="", trash=0, type=0, caret=0)
     panel.show_note(note)
     assert panel._highlighter is not None  # XmlHighlighter включён
+
+def test_scroll_roundtrip(tmp_path):
+    """Позиция скролла заметки и файла каталога — в meta БД (px, 0 не хранится)."""
+    from notes.notes_manager import NotesManager
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        nid = mgr.create("Заметка")
+        assert mgr.get_note_scroll(nid) == 0
+        mgr.set_note_scroll(nid, 350)
+        assert mgr.get_note_scroll(nid) == 350
+        mgr.set_path_scroll(r"C:\work\a.bsl", 120)
+        assert mgr.get_path_scroll(r"C:\work\a.bsl") == 120
+        mgr.set_note_scroll(nid, 0)  # 0 = «не сохранено» → остаётся старое
+        assert mgr.get_note_scroll(nid) == 350
+    finally:
+        mgr.close()
+
+
+def test_panel_scroll_restore(qt_app):
+    """Скролл md-документа восстанавливается после переключения заметок."""
+    from PySide6.QtWidgets import QApplication
+    from notes.notes_panel import NotesPanel
+    from notes.notes_manager import Note
+
+    panel = NotesPanel()
+    panel.resize(500, 600)  # дать вьюпорту реальный размер (иначе max=0)
+    saved = {}
+    panel.scroll_key = "note:7"
+    panel.scroll_load = lambda k: saved.get(k, 0)
+    panel.scroll_save = lambda k, p: saved.__setitem__(k, p)
+
+    long = "\n".join(f"Строка {i}" for i in range(400))
+    note = Note(id=7, pid=0, name="big.md", note=long, pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    QApplication.processEvents()
+    bar = panel.body.verticalScrollBar()
+    assert bar.maximum() > 0
+    bar.setValue(bar.maximum())
+    pos = panel.current_scroll()
+    assert pos > 0
+    panel.scroll_save(panel.scroll_key, pos)  # как делает миксин при уходе
+
+    other = Note(id=8, pid=0, name="x.md", note="# Другая", pos=1,
+                 created="", modified="", trash=0, type=0, caret=0)
+    panel.scroll_key = "note:8"
+    panel.show_note(other)
+    QApplication.processEvents()
+    assert bar.value() == 0  # новая заметка — сверху
+
+    panel.scroll_key = "note:7"
+    panel.show_note(note)
+    QApplication.processEvents()  # singleShot(0) восстановления
+    assert bar.value() == pos
+
+
+def test_explicit_bad_db_falls_back_to_default(monkeypatch, tmp_path):
+    """Битый файл по явному пути НЕ отключает заметки — fallback на дефолтный."""
+    from notes import notes_manager as nm
+
+    bad = tmp_path / "bad.db"
+    bad.write_bytes(b"NOT A SQLITE DATABASE")
+    default = tmp_path / "default_notes.db"
+    monkeypatch.setattr(nm, "_default_db_path", lambda: default)
+    monkeypatch.setattr(nm, "_legacy_db_candidates", lambda: [])  # без реальных данных
+
+    mgr = nm.NotesManager(bad)  # явный путь → битый → fallback
+    try:
+        assert mgr.init_error is not None
+        assert "не удалось открыть" in mgr.init_error
+        assert mgr.db_path == bad          # запрошенный путь запомнен
+        mgr.create("Работает и на дефолте")
+        assert [n.name for n in mgr.load_all()] == ["Работает и на дефолте"]
+    finally:
+        mgr.close()
+    assert default.exists()
+
+def test_path_pointing_to_directory_uses_notes_db_inside(tmp_path):
+    """[notes] path может указывать на КАТАЛОГ — берётся notes.db внутри него."""
+    from notes.notes_manager import NotesManager
+
+    d = tmp_path / "data_dir"
+    d.mkdir()
+    mgr = NotesManager(d)  # явный путь-каталог
+    try:
+        assert mgr.db_path == d / "notes.db"
+        mgr.create("В каталоге")
+        assert len(mgr.load_all()) == 1
+        assert (d / "notes.db").exists()
+    finally:
+        mgr.close()

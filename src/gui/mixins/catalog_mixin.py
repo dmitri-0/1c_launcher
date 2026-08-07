@@ -77,6 +77,16 @@ class CatalogMixin:
         f = self._catalog_file_from_index(current)
         if f is not None and not f.is_dir:
             self._active_catalog_path = f.path
+            # позиция скролла файла каталога — как у заметок (persist в БД)
+            bind = getattr(self, "_bind_scroll", None)
+            mgr = self.notes_manager
+            if bind is not None and mgr is not None:
+                path = f.path
+                bind(
+                    f"path:{path}",
+                    lambda k: mgr.get_path_scroll(path),
+                    lambda k, pos: mgr.set_path_scroll(path, pos),
+                )
             engine_name = detect_engine(f.name, "")
             if engine_name == "image":
                 # картинка: preview движком image (text = путь к файлу)
@@ -100,6 +110,9 @@ class CatalogMixin:
 
     def _save_active_file(self):
         """Сохранить редактируемый файл каталога в ЕГО кодировке (best-effort)."""
+        save_scroll = getattr(self, "_save_current_scroll", None)
+        if save_scroll is not None:
+            save_scroll()  # позиция скролла файла (persist)
         if self.catalog_manager is None or self._active_catalog_path is None:
             return
         try:
