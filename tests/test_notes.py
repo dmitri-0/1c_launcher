@@ -715,3 +715,33 @@ def test_path_pointing_to_directory_uses_notes_db_inside(tmp_path):
         assert (d / "notes.db").exists()
     finally:
         mgr.close()
+
+def test_note_text_survives_switch_away_and_back(qt_app, monkeypatch, tmp_path):
+    """Отредактированный текст виден после A→B→A: панель показывает свежие
+    данные из БД, а не устаревший снимок из элемента дерева."""
+    from notes import notes_manager as nm
+    monkeypatch.setattr(nm, "NOTES_PATH", str(tmp_path / "notes.db"))
+    monkeypatch.setattr(nm, "_legacy_db_candidates", lambda: [])
+
+    from gui.tree_window import TreeWindow
+    win = TreeWindow()
+    try:
+        mgr = win.notes_manager
+        nid = mgr.create("Заметка A")
+        nid2 = mgr.create("Заметка B")
+        win.ensure_notes_node()
+
+        # A → F4 → ввод → F4 (сохранение в БД)
+        win.open_note(nid)
+        win.handle_f4()
+        win.notes_panel.body.setPlainText("ТЕКСТ В ЗАМЕТКЕ A")
+        win.handle_f4()
+        assert mgr.get(nid).note == "ТЕКСТ В ЗАМЕТКЕ A"  # в БД сохранено
+
+        # A → B → A: панель должна показать сохранённый текст
+        win.open_note(nid2)
+        win.open_note(nid)
+        assert win.notes_panel._raw == "ТЕКСТ В ЗАМЕТКЕ A"
+        assert win.notes_panel.body.toPlainText() == "ТЕКСТ В ЗАМЕТКЕ A"
+    finally:
+        win.close()

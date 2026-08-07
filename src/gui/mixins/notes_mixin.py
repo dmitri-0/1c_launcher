@@ -187,8 +187,12 @@ class NotesMixin:
         note = self._note_from_index(current)
         if note is not None and not note.is_folder:
             self._active_note_id = note.id
+            # ВАЖНО: элемент дерева хранит СНИМОК Note на момент сборки узла —
+            # после редактирования он устарел (note=''). Показываем свежие
+            # данные из БД, иначе при возврате A→B→A панель рендерит пусто.
+            fresh = self.notes_manager.get(note.id) or note
             mgr = self.notes_manager
-            note_id = note.id
+            note_id = fresh.id
             # ключ панели — токен восстановления; БД получает голый id,
             # а не строку с префиксом (иначе расходятся пространства ключей)
             self._bind_scroll(
@@ -196,7 +200,7 @@ class NotesMixin:
                 lambda k: mgr.get_note_scroll(note_id),
                 lambda k, pos: mgr.set_note_scroll(note_id, pos),
             )
-            self.notes_panel.show_note(note)
+            self.notes_panel.show_note(fresh)
             self._show_notes_panel()
         else:
             # папка/корень/не-заметки — панель скрываем, если её не занял каталог
