@@ -11,6 +11,7 @@
 from PySide6.QtWidgets import QMenu, QInputDialog
 from PySide6.QtCore import Qt, QModelIndex
 
+from config import NOTES_PANEL_WIDTH_PERCENT
 from notes.notes_manager import NotesManager, Note
 from notes.notes_tree_builder import NotesTreeBuilder, NOTES_ROOT_DATA
 
@@ -108,13 +109,28 @@ class NotesMixin:
         return None
 
     # ── выбор заметки → preview в панели ─────────────────────────────
+    def _show_notes_panel(self):
+        """Показать панель заметок; если она была скрыта — пере-применить долю.
+
+        QSplitter схлопывает скрытый ребёнок в 0, поэтому после hide() нужно
+        снова выставить размеры ([notes] panel_width_percent из launcher.toml).
+        Если панель уже видна (пользователь сам перетащил разделитель) —
+        размеры не трогаем.
+        """
+        was_hidden = self.notes_panel.isHidden()
+        self.notes_panel.show()
+        if was_hidden:
+            percent = max(20, min(95, int(NOTES_PANEL_WIDTH_PERCENT)))
+            total = max(self.splitter.width(), 800)
+            self.splitter.setSizes([int(total * (100 - percent) / 100), int(total * percent / 100)])
+
     def _on_notes_selection_changed(self, current: QModelIndex, previous: QModelIndex):
         self._save_current_note()
         note = self._note_from_index(current)
         if note is not None and not note.is_folder:
             self._active_note_id = note.id
             self.notes_panel.show_note(note)
-            self.notes_panel.show()
+            self._show_notes_panel()
         else:
             # папка/корень/не-заметки — панель скрываем
             self._active_note_id = None
@@ -152,27 +168,13 @@ class NotesMixin:
             self.notes_panel.enter_edit(caret=note.caret if note else 0)
             self.notes_panel.focus_editor()
 
-    def handle_f4(self) -> bool:
-        """F4: в узле заметок — переключить preview/редактирование заметки.
-
-        Возвращает True, если F4 «съеден» узлом заметок (не должен открыть
-        конфигуратор). Папка/корень заметок — F4 не редактирует, но и не
-        передаётся дальше.
-        """
-        item, note = self._selected_note_item()
-        if item is None:
-            return False
-        if note is None or note.is_folder:
-            return True
-        self._toggle_notes_edit()
-        return True
-
-    # ── действия (возвращают True, если обработали) ──────────────────
+    # ── действия (кооперативные: вне узла заметок делегируем ShortcutsMixin) ──
     def handle_enter(self) -> bool:
-        """Enter: заметка — показать preview/выбрать, папка/корень — раскрыть."""
+        """Enter: заметка — показать preview; папка/корень — раскрыть.
+        Вне узла заметок — super() → ShortcutsMixin (базы/процессы)."""
         item, note = self._selected_note_item()
         if item is None:
-            return False
+            return super().handle_enter()
         index = self.tree.currentIndex()
         if note is None or note.is_folder:
             self.tree.setExpanded(index, not self.tree.isExpanded(index))
@@ -181,15 +183,26 @@ class NotesMixin:
         return True
 
     def handle_delete(self) -> bool:
-        """Del: заметку/папку — в корзину."""
+        """Del: заметку/папку — в корзину. Вне узла заметок — super() (базы/процессы)."""
         item, note = self._selected_note_item()
         if item is None or note is None:
-            return False
+            return super().handle_delete()
         self.notes_manager.delete_to_trash(note.id)
         self._active_note_id = None
         self.notes_panel.hide()
         self.ensure_notes_node()
         self.statusBar.showMessage(f"🗑 «{note.name}» — в корзину", 3000)
+        return True
+
+    def handle_f4(self) -> bool:
+        """F4: в узле заметок — preview/редактирование заметки (папка/корень — съедаем).
+        Вне узла заметок — super() → ShortcutsMixin → конфигуратор."""
+        item, note = self._selected_note_item()
+        if item is None:
+            return super().handle_f4()
+        if note is None or note.is_folder:
+            return True
+        self._toggle_notes_edit()
         return True
 
     # ── операции с заметками ─────────────────────────────────────────
@@ -203,11 +216,11 @@ class NotesMixin:
         self.tree.scrollTo(index)
 
     def _current_notes_parent_id(self) -> int:
-        """Родитель для новой заметки: выбранная папка или родитель выбранной заметки."""
+        """Родитель для новой заметки: выбранная заметка/папка (вложение в неё)."""
         item, note = self._selected_note_item()
         if item is None or note is None:
             return 0
-        return note.id if note.is_folder else note.pid
+        return note.id
 
     def new_note(self):
         if self.notes_manager is None:
@@ -255,7 +268,10 @@ class NotesMixin:
         if note is not None:
             if not note.is_folder:
                 menu.addAction("📄 Открыть", lambda: self.open_note(note.id))
-            menu.addSeparator()
+                menu.addSeparator()
+                menu.addAction("📝 Дочерняя заметка", self.new_note)
+                menu.addAction("📁 Дочерняя папка", self.new_folder)
+                menu.addSeparator()
             menu.addAction("✏️ Переименовать", self.rename_selected)
             menu.addAction("🗑 В корзину", self.handle_delete)
         menu.exec(self.tree.viewport().mapToGlobal(pos))

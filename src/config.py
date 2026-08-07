@@ -45,6 +45,7 @@ def _default_settings() -> dict:
         },
         "notes": {
             "path": "",  # пусто = notes.db рядом с exe
+            "panel_width_percent": 80,  # доля ширины окна для панели заметок
         },
         # Отслеживаемые приложения для узла "Основное"
         "tracked_applications": [
@@ -181,8 +182,14 @@ def _merge(settings: dict, data: dict) -> None:
             settings["hotkey"]["vk"] = _parse_vk(hotkey["vk"])
 
     notes = data.get("notes")
-    if isinstance(notes, dict) and "path" in notes:
-        settings["notes"]["path"] = str(notes["path"])
+    if isinstance(notes, dict):
+        if "path" in notes:
+            settings["notes"]["path"] = str(notes["path"])
+        if "panel_width_percent" in notes:
+            try:
+                settings["notes"]["panel_width_percent"] = int(notes["panel_width_percent"])
+            except (TypeError, ValueError):
+                pass  # некорректное значение — оставляем дефолт
 
     apps = data.get("tracked_applications")
     if isinstance(apps, list) and apps:
@@ -262,6 +269,9 @@ GLOBAL_HOTKEY_VK = _SETTINGS["hotkey"]["vk"]
 
 # Путь к БД заметок (SQLite). Пустая строка = notes.db рядом с exe/модулем.
 NOTES_PATH = _SETTINGS["notes"].get("path", "")
+
+# Доля ширины окна для панели заметок (в процентах, 20–95).
+NOTES_PANEL_WIDTH_PERCENT = _SETTINGS["notes"].get("panel_width_percent", 80)
 
 # Отслеживаемые приложения для узла "Основное"
 TRACKED_APPLICATIONS = _SETTINGS["tracked_applications"]

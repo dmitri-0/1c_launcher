@@ -221,6 +221,90 @@ def test_notes_panel_plain_format_fallback(qt_app):
     assert panel.is_edit_mode() is False
 
 
+def test_notes_handlers_delegate_outside_notes_node():
+    """Регрессия: NotesMixin (первый в MRO TreeWindow) не должен съедать
+    Enter/F4/Del для баз — вне узла заметок делегирует super() (ShortcutsMixin)."""
+    from gui.mixins.notes_mixin import NotesMixin
+
+    calls = []
+
+    class _Base:
+        def handle_enter(self):
+            calls.append("enter")
+
+        def handle_delete(self):
+            calls.append("delete")
+
+        def handle_f4(self):
+            calls.append("f4")
+
+    class _FakeTree:
+        def currentIndex(self):
+            return object()
+
+        def isExpanded(self, index):
+            return False
+
+        def setExpanded(self, index, expand):
+            calls.append("expand")
+
+    class _Stub(NotesMixin, _Base):
+        def __init__(self):
+            self._sel = (None, None)
+            self._tree = _FakeTree()
+
+        def _selected_note_item(self):
+            return self._sel
+
+        @property
+        def tree(self):
+            return self._tree
+
+    s = _Stub()
+
+    # вне узла заметок (база/процесс) → делегирование ShortcutsMixin-логике
+    s.handle_enter()
+    s.handle_delete()
+    s.handle_f4()
+    assert calls == ["enter", "delete", "f4"]
+
+    # в узле заметок: папка — раскрытие, делегирования нет
+    s._sel = (object(), Note(id=1, pid=0, name="Папка", note="", pos=0,
+                             created="", modified="", trash=0, type=1))
+    calls.clear()
+    s.handle_enter()
+    assert calls == ["expand"]
+    calls.clear()
+    s.handle_f4()          # папка — съедаем F4, но не редактируем
+    assert calls == []
+
+
+def test_note_under_note_builds_tree(tmp_path):
+    """Заметки можно вкладывать в заметки — дерево строится по pid независимо от type."""
+    from PySide6.QtGui import QStandardItemModel
+    from notes.notes_tree_builder import NotesTreeBuilder
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        parent_id = mgr.create("Родитель", "текст родителя", type_=0)   # заметка
+        mgr.create("Ребёнок", pid=parent_id, type_=0)                   # вложенная заметка
+        node = NotesTreeBuilder(QStandardItemModel(), mgr).build_node()
+        assert node.rowCount() == 1
+        parent_item = node.child(0, 0)
+        assert parent_item.text() == "Родитель"
+        assert parent_item.child(0, 0).text() == "Ребёнок"
+    finally:
+        mgr.close()
+
+
+def test_config_notes_panel_width():
+    import config
+
+    settings = config.load_settings(config.find_config_file())
+    percent = config.NOTES_PANEL_WIDTH_PERCENT
+    assert percent == settings["notes"].get("panel_width_percent", 80)
+
+
 # ── интеграция в GUI ─────────────────────────────────────────────────
 def test_builder_builds_tree_from_db(tmp_path):
     from PySide6.QtGui import QStandardItemModel

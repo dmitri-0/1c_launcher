@@ -75,9 +75,14 @@ class TreeWindow(
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.addWidget(self.tree)
         self.splitter.addWidget(self.notes_panel)
-        self.splitter.setStretchFactor(0, 3)
-        self.splitter.setStretchFactor(1, 2)
-        self.splitter.setSizes([620, 380])
+
+        # Доля панели заметок по ширине окна — из launcher.toml ([notes] panel_width_percent)
+        from config import NOTES_PANEL_WIDTH_PERCENT
+        percent = max(20, min(95, int(NOTES_PANEL_WIDTH_PERCENT)))
+        self.splitter.setStretchFactor(0, 100 - percent)
+        self.splitter.setStretchFactor(1, percent)
+        total = max(self.width(), 800)
+        self.splitter.setSizes([int(total * (100 - percent) / 100), int(total * percent / 100)])
 
         self.setCentralWidget(self.splitter)
 

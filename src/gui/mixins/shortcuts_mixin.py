@@ -15,10 +15,8 @@ class ShortcutsMixin:
         self.statusBar.showMessage(f"\\U0001f3a8 Тема переключена: {status}", 2000)
 
     def handle_enter(self):
-        """Обработка Enter: заметка — открыть; активация процесса или чистый запуск базы."""
-        notes = getattr(self, "notes_mixin", None)
-        if notes is not None and notes.handle_enter():
-            return
+        """Обработка Enter: активация процесса или чистый запуск базы (без отладки).
+        (Заметки перехватывают Enter раньше — NotesMixin, см. MRO TreeWindow.)"""
         process = self.process_actions.get_selected_process()
         if process:
             selected_index = self.tree.currentIndex()
@@ -54,11 +52,8 @@ class ShortcutsMixin:
             self.minimize_to_tray()
 
     def handle_f4(self):
-        """Обработка F4: в узле заметок — preview/редактирование заметки,
-        иначе — открытие конфигуратора."""
-        notes = getattr(self, "notes_mixin", None)
-        if notes is not None and notes.handle_f4():
-            return
+        """Обработка F4: открытие конфигуратора.
+        (Заметки перехватывают F4 раньше — NotesMixin, см. MRO TreeWindow.)"""
         self.handle_f4_open()
 
     def handle_f5_ir_tools(self):
@@ -119,10 +114,8 @@ class ShortcutsMixin:
             self.actions.unpublish_database(db)
 
     def handle_delete(self):
-        """Обработка Del: заметка — в корзину; закрытие процесса или удаление базы."""
-        notes = getattr(self, "notes_mixin", None)
-        if notes is not None and notes.handle_delete():
-            return
+        """Обработка Del: закрытие процесса или удаление базы.
+        (Заметки перехватывают Del раньше — NotesMixin, см. MRO TreeWindow.)"""
         process = self.process_actions.get_selected_process()
         if process:
             self.process_actions.close_process(process, force=False)

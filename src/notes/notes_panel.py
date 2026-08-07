@@ -9,12 +9,16 @@
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit
 from PySide6.QtGui import QTextCursor
+from PySide6.QtCore import Qt, QEvent
 
 from notes.notes_manager import Note, guess_note_format
 
 
 class NotesPanel(QWidget):
-    """Правая панель: заголовок + тело заметки (preview / редактирование)."""
+    """Правая панель: заголовок + тело заметки (preview / редактирование).
+
+    Zoom: Ctrl+колесо мыши над текстом (QTextEdit.zoomIn/zoomOut).
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -29,9 +33,10 @@ class NotesPanel(QWidget):
 
         self.body = QTextEdit()
         self.body.setReadOnly(True)   # по умолчанию — preview
+        self.body.installEventFilter(self)
         layout.addWidget(self.body, 1)
 
-        self.hint = QLabel("F4 — редактирование / preview")
+        self.hint = QLabel("F4 — редактирование / preview · Ctrl+колесо — zoom")
         self.hint.setStyleSheet("color: gray;")
         layout.addWidget(self.hint)
 
@@ -39,6 +44,18 @@ class NotesPanel(QWidget):
         self._raw = ""
         self._name = ""
         self._edit = False
+
+    def eventFilter(self, obj, event):
+        """Ctrl+колесо над текстом — zoom (не влияет на preview/редактирование)."""
+        if obj is self.body and event.type() == QEvent.Wheel and (event.modifiers() & Qt.ControlModifier):
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.body.zoomIn(1)
+            elif delta < 0:
+                self.body.zoomOut(1)
+            event.accept()
+            return True
+        return super().eventFilter(obj, event)
 
     # ── показ заметки ───────────────────────────────────────────────
     def show_note(self, note: Note):
