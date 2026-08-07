@@ -22,7 +22,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QTextCursor, QImage, QFont
 from PySide6.QtCore import Qt, QEvent
 
-from notes.engines import detect_engine, get_engine
+from notes.engines import detect_engine, get_engine, PreviewEngine
+from notes.notes_document import NoteTextDocument
 
 # Шаг zoom в пунктах за одну ступень
 _ZOOM_STEP_PT = 2.0
@@ -51,7 +52,7 @@ class NotesTextEdit(QTextEdit):
 class NotesPanel(QWidget):
     """Правая панель: заголовок + тело (preview / редактирование) + zoom."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, initial_zoom: int = 0):
         super().__init__(parent)
         self.setMinimumWidth(300)
 
@@ -88,6 +89,9 @@ class NotesPanel(QWidget):
         self.body = NotesTextEdit()
         self.body.setReadOnly(True)   # по умолчанию — preview
         self.body.installEventFilter(self)
+        # Документ с загрузчиком вложенных картинок (noteimg:<id> из notes.db)
+        self._doc = NoteTextDocument(self.body)
+        self.body.setDocument(self._doc)
         layout.addWidget(self.body, 1)
 
         self.hint = QLabel("F4 — редактирование / preview · Ctrl+колесо — zoom")
@@ -99,7 +103,8 @@ class NotesPanel(QWidget):
         self._name = ""
         self._edit = False
         self._binary = False
-        self._zoom = 0
+        self._zoom = max(_ZOOM_MIN, min(_ZOOM_MAX, int(initial_zoom)))
+        self._highlighter = None
         self._base_pt = self.body.font().pointSizeF() or 11.0
 
     # ── вставка картинки из буфера ──────────────────────────────────
@@ -111,6 +116,16 @@ class NotesPanel(QWidget):
     @image_handler.setter
     def image_handler(self, handler):
         self.body.image_handler = handler
+
+    # ── загрузчик вложенных картинок (для md-preview) ────────────────
+    @property
+    def resource_loader(self):
+        """Прокси на документ: callable(image_id) -> bytes для noteimg:<id>."""
+        return self._doc.loader
+
+    @resource_loader.setter
+    def resource_loader(self, loader):
+        self._doc.loader = loader
 
     # ── zoom ─────────────────────────────────────────────────────────
     def change_zoom(self, steps: int = 0, reset: bool = False):
@@ -157,10 +172,12 @@ class NotesPanel(QWidget):
         self._edit = False
         self._render_preview()
 
-    def show_content(self, name: str, text: str, binary: bool = False):
+    def show_content(self, name: str, text: str, binary: bool = False, engine_name: str = None):
         """Показать произвольное содержимое (файл каталога) в preview.
 
         binary=True — бинарный файл: только заглушка, редактирование недоступно.
+        engine_name — явный движок (например, 'image' с text=путь к файлу);
+        иначе движок определяется по имени/содержимому.
         """
         self._note = None
         self._name = name
@@ -174,7 +191,7 @@ class NotesPanel(QWidget):
                 "[Бинарный файл — F4 или контекстное меню: открыть внешним приложением]"
             )
         else:
-            self._render_preview()
+            self._render_preview(engine=get_engine(engine_name) if engine_name else None)
 
     def clear(self):
         """Пустое состояние (ничего не выбрано)."""
@@ -188,14 +205,34 @@ class NotesPanel(QWidget):
         self.body.setReadOnly(True)
 
     # ── режимы ──────────────────────────────────────────────────────
-    def _render_preview(self):
+    def _render_preview(self, engine: PreviewEngine = None):
         """Рендер по движку: базовый шрифт масштабируется ДО рендера,
         чтобы все блоки (код/заголовки) менялись пропорционально."""
         self._edit = False
         self.body.setReadOnly(True)
-        engine = get_engine(detect_engine(self._name, self._raw))
+        if engine is None:
+            engine = get_engine(detect_engine(self._name, self._raw))
         self._apply_zoom_font()
         engine.render(self.body, self._raw, self._name)
+        self._apply_highlighter(engine)
+
+    def _apply_highlighter(self, engine: PreviewEngine):
+        """Подсветка синтаксиса для движков с highlighter_cls (bsl/json);
+        для остальных — отключаем."""
+        hl_cls = getattr(engine, "highlighter_cls", None)
+        if hl_cls is None:
+            if self._highlighter is not None:
+                self._highlighter.setDocument(None)
+                self._highlighter = None
+            return
+        if self._highlighter is None or not isinstance(self._highlighter, hl_cls):
+            # отцепить старый хайлайтер до создания нового — иначе оба висят
+            # на документе (двойная работа + утечка по сигналам)
+            if self._highlighter is not None:
+                self._highlighter.setDocument(None)
+            self._highlighter = hl_cls(self._doc)
+        self._highlighter.setDocument(self._doc)
+        self._highlighter.rehighlight()
 
     def enter_preview(self):
         """Выйти в preview (зафиксировав правки из режима редактирования)."""

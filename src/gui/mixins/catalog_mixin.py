@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, QModelIndex
 from config import CATALOG_PATH, CATALOG_MASK
 from catalog.catalog_manager import CatalogManager, CatalogFile
 from catalog.catalog_tree_builder import CatalogTreeBuilder, CATALOG_ROOT_DATA
+from notes.engines import detect_engine
 
 
 class CatalogMixin:
@@ -76,14 +77,20 @@ class CatalogMixin:
         f = self._catalog_file_from_index(current)
         if f is not None and not f.is_dir:
             self._active_catalog_path = f.path
-            result = self.catalog_manager.read_text_with_encoding(f.path)
-            if result is not None:
-                text, encoding = result
-                self._active_catalog_encoding = encoding
+            engine_name = detect_engine(f.name, "")
+            if engine_name == "image":
+                # картинка: preview движком image (text = путь к файлу)
+                self.notes_panel.show_content(f.name, str(f.path), engine_name="image")
             else:
-                text, encoding = "", "utf-8"
-                self._active_catalog_encoding = "utf-8"
-            self.notes_panel.show_content(f.name, text, binary=result is None)
+                result = self.catalog_manager.read_text_with_encoding(f.path)
+                if result is not None:
+                    text, encoding = result
+                    self._active_catalog_encoding = encoding
+                    self.notes_panel.show_content(f.name, text)
+                else:
+                    text, encoding = "", "utf-8"
+                    self._active_catalog_encoding = "utf-8"
+                    self.notes_panel.show_content(f.name, text, binary=True)
             self._show_notes_panel()  # общий метод из NotesMixin
         else:
             self._active_catalog_path = None
@@ -132,6 +139,9 @@ class CatalogMixin:
             self._save_active_file()
             self.notes_panel.enter_preview()
         else:
+            if detect_engine(f.name, "") == "image":
+                self._open_external(f.path)  # картинка → внешнее приложение
+                return True
             text = self.catalog_manager.read_text(f.path)
             if text is not None:
                 self.notes_panel.enter_edit(caret=0)

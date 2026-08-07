@@ -170,11 +170,105 @@ def test_catalog_handlers_delegate_outside_catalog():
     assert calls == ["enter", "f4", "delete"]   # вне каталога — делегирование
 
 
-def test_notes_db_default_next_to_exe_frozen(monkeypatch):
-    """В сборке notes.db создаётся РЯДОМ С exe (динамические файлы — у бинарника)."""
-    import sys
+def test_notes_db_default_in_appdata(monkeypatch):
+    """notes.db по умолчанию лежит в %APPDATA%\\1c_launcher — вне каталога исходников
+    (одинаково для скриптовой и exe-версии, переопределяется в launcher.toml)."""
+    import os
     from notes import notes_manager
 
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", r"C:\dist\app\app.exe")
-    assert notes_manager._default_db_path() == Path("C:/dist/app/notes.db")
+    monkeypatch.setenv("APPDATA", r"C:\Users\test\AppData\Roaming")
+    assert notes_manager._default_db_path() == Path("C:/Users/test/AppData/Roaming/1c_launcher/notes.db")
+
+
+def test_notes_images_in_db(tmp_path):
+    """Вставленные картинки хранятся в БД (blob) — портативно, без файлов на диске."""
+    from notes.notes_manager import NotesManager
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        note_id = mgr.create("Заметка")
+        image_id = mgr.add_image(note_id, "img.png", b"\x89PNG-fake-bytes")
+        assert image_id > 0
+        assert mgr.get_image(image_id) == b"\x89PNG-fake-bytes"
+        assert mgr.get_image(99999) is None
+    finally:
+        mgr.close()
+
+
+def test_purge_removes_images(tmp_path):
+    """purge удаляет и blob-картинки удалённых заметок (нет сирот в images)."""
+    from notes.notes_manager import NotesManager
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        nid = mgr.create("Заметка")
+        img = mgr.add_image(nid, "i.png", b"\x89PNG-fake")
+        assert mgr.get_image(img) is not None
+        mgr.purge(nid)
+        assert mgr.get_image(img) is None
+    finally:
+        mgr.close()
+
+
+def test_migrate_legacy_db_to_appdata(monkeypatch, tmp_path):
+    """Старая notes.db (с заметками) переносится в %APPDATA% один раз."""
+    from notes import notes_manager
+    from notes.notes_manager import NotesManager
+
+    legacy = tmp_path / "legacy_notes.db"
+    mgr = NotesManager(legacy)
+    mgr.create("Старая заметка")
+    mgr.close()
+    target = tmp_path / "appdata" / "1c_launcher" / "notes.db"
+    monkeypatch.setattr(notes_manager, "_legacy_db_candidates", lambda: [legacy])
+
+    # target отсутствует → миграция
+    assert notes_manager.migrate_legacy_db(target) is True
+    assert target.exists()
+    assert NotesManager(target).load_all()[0].name == "Старая заметка"
+    NotesManager(target).close()
+
+    # target уже есть и содержит заметки → повторно не трогаем
+    assert notes_manager.migrate_legacy_db(target) is False
+
+    # пустая legacy (0 заметок) — миграции нет
+    empty = tmp_path / "empty.db"
+    NotesManager(empty).close()
+    target2 = tmp_path / "appdata" / "1c_launcher" / "notes2.db"
+    monkeypatch.setattr(notes_manager, "_legacy_db_candidates", lambda: [empty])
+    assert notes_manager.migrate_legacy_db(target2) is False
+    assert not target2.exists()
+
+    # источник не удаляется (копия-бэкап)
+    assert legacy.exists()
+
+
+def test_note_document_loads_image_from_db(qt_app):
+    """NoteTextDocument достаёт blob из БД по URL noteimg:<id> (md-preview)."""
+    from PySide6.QtCore import QUrl
+    from PySide6.QtGui import QTextDocument, QImage
+    from notes.notes_document import NoteTextDocument
+    from notes.notes_manager import NotesManager
+
+    mgr = NotesManager(Path(__import__("tempfile").gettempdir()) / "notes_test_tmp.db")
+    try:
+        # реальный png: рисуем и сохраняем в QBuffer
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+
+        buf = QBuffer()
+        buf.open(QIODevice.OpenModeFlag.WriteOnly)
+        QImage(4, 4, QImage.Format.Format_ARGB32).save(buf, "PNG")
+        buf.close()
+        image_id = mgr.add_image(1, "img.png", bytes(buf.data()))
+
+        doc = NoteTextDocument()
+        doc.loader = mgr.get_image
+        result = doc.loadResource(QTextDocument.ImageResource, QUrl(f"noteimg:{image_id}"))
+        assert result is not None
+        assert isinstance(result, QImage)
+        assert result.isNull() is False
+        # неизвестный id → None (fallback)
+        assert doc.loadResource(QTextDocument.ImageResource, QUrl("noteimg:99999")) is None
+    finally:
+        mgr.close()
+        (Path(__import__("tempfile").gettempdir()) / "notes_test_tmp.db").unlink(missing_ok=True)

@@ -35,6 +35,7 @@ class NotesMixin:
             self.tree.doubleClicked.connect(self._on_notes_double_clicked)
             self.tree.selectionModel().currentChanged.connect(self._on_notes_selection_changed)
             self.notes_panel.image_handler = self._save_note_image
+            self.notes_panel.resource_loader = self.notes_manager.get_image
             self._focus_switch = QShortcut(QKeySequence("Ctrl+Tab"), self)
             self._focus_switch.activated.connect(self._switch_focus)
         except Exception as e:
@@ -115,21 +116,26 @@ class NotesMixin:
         return None
 
     def _save_note_image(self, image) -> str:
-        """Сохранить вставленную из буфера картинку и вернуть placeholder (md).
+        """Сохранить вставленную из буфера картинку В БД и вернуть md-placeholder.
 
-        Файл кладётся рядом с notes.db: <db_dir>/images/note_<id>/img_<ts>.png.
-        Preview-движок md рендерит placeholder как изображение.
+        Плейсхолдер `![name](noteimg:<id>)` рендерится движком md через
+        NoteTextDocument.loadResource (картинка лежит в notes.db, не на диске —
+        портативно и работает в exe-сборке).
         """
         if self.notes_manager is None or self._active_note_id is None:
             return ""
         try:
-            db_dir = self.notes_manager.db_path.parent
-            img_dir = db_dir / "notes_images" / f"note_{self._active_note_id}"
-            img_dir.mkdir(parents=True, exist_ok=True)
-            fname = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            path = img_dir / fname
-            image.save(str(path), "PNG")
-            return f"![{fname}]({path.as_posix()})"
+            from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+
+            buffer = QBuffer()
+            buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+            image.save(buffer, "PNG")
+            buffer.close()
+            name = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            image_id = self.notes_manager.add_image(
+                self._active_note_id, name, bytes(buffer.data())
+            )
+            return f"![{name}](noteimg:{image_id})"
         except Exception as e:
             print(f"Не удалось сохранить картинку: {e}")
             return ""

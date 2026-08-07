@@ -8,6 +8,7 @@
 guess_note_format: пока понимаем только Markdown, остальное — plain text.
 """
 
+import os
 import sqlite3
 import sys
 import threading
@@ -46,10 +47,61 @@ def _now() -> str:
 
 
 def _default_db_path() -> Path:
-    """По умолчанию notes.db рядом с exe (сборка) / рядом с модулем (исходники)."""
+    """По умолчанию notes.db в %APPDATA%\\1c_launcher — вне каталога исходников.
+
+    Одинаков для скриптовой и exe-версии; переопределяется в launcher.toml
+    ([notes] path). Раньше (src/) данные могли попасть в git и терялись
+    при пересборке.
+    """
+    base = os.getenv("APPDATA") or str(Path.home())
+    return Path(base) / "1c_launcher" / "notes.db"
+
+
+def _legacy_db_candidates() -> List[Path]:
+    """Старые места notes.db (до переезда в %APPDATA%): рядом с пакетом notes
+    (скриптовая версия) и рядом с exe (старые сборки)."""
+    candidates = [Path(__file__).parent / "notes.db"]
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent / "notes.db"
-    return Path(__file__).resolve().parent / "notes.db"
+        candidates.append(Path(sys.executable).parent / "notes.db")
+    return [c for c in candidates if c.is_file() and c.stat().st_size > 0]
+
+
+def migrate_legacy_db(target: Path) -> bool:
+    """Один раз перенести данные из старой notes.db в новый путь (%APPDATA%).
+
+    Условия: db_path не задан явно (это дефолт); legacy-БД найдена; в target
+    ещё НЕТ заметок (пустая/отсутствующая — например созданная смоук-прогоном),
+    а в legacy они есть. Источник НЕ удаляется (копия-бэкап).
+    """
+    source = next(iter(_legacy_db_candidates()), None)
+    if source is None:
+        return False
+    try:
+        with sqlite3.connect(str(source)) as conn:
+            legacy_count = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+    except sqlite3.Error:
+        return False
+    if legacy_count == 0:
+        return False
+    if target.exists():
+        if target.stat().st_size == 0:
+            pass  # пустой файл — заменяем
+        else:
+            try:
+                with sqlite3.connect(str(target)) as conn:
+                    target_count = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+            except sqlite3.Error:
+                return False
+            if target_count > 0:
+                return False  # в target уже есть заметки — не трогаем
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+
+        shutil.copy2(str(source), str(target))
+        return True
+    except OSError:
+        return False  # не блокируем запуск, если копия не вышла
 
 
 def guess_note_format(name: str, text: str) -> str:
@@ -66,7 +118,11 @@ class NotesManager:
     """SQLite-хранилище заметок: CRUD, дерево, корзина."""
 
     def __init__(self, db_path: Optional[Path] = None):
+        explicit = bool(db_path or NOTES_PATH)
         path = Path(db_path) if db_path else (Path(NOTES_PATH) if NOTES_PATH else _default_db_path())
+        if not explicit:
+            # дефолтный путь: один раз переносим данные старой БД (если была)
+            migrate_legacy_db(path)
         self.db_path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path))
@@ -94,9 +150,20 @@ class NotesManager:
             cols = [row[1] for row in self._conn.execute("PRAGMA table_info(notes)").fetchall()]
             if "caret" not in cols:
                 self._conn.execute("ALTER TABLE notes ADD COLUMN caret INTEGER NOT NULL DEFAULT 0")
+            # Вложенные картинки заметок хранятся в БД (blob), а не файлами:
+            # портативно, работает и в exe-сборке, placeholder рендерится в preview.
+            self._conn.execute(
+                """CREATE TABLE IF NOT EXISTS images(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    note_id INTEGER NOT NULL DEFAULT 0,
+                    name TEXT NOT NULL DEFAULT '',
+                    data BLOB NOT NULL,
+                    created TEXT NOT NULL DEFAULT ''
+                )"""
+            )
             self._conn.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
-            self._conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '2')")
-            self._conn.execute("UPDATE meta SET value = '2' WHERE key = 'schema_version'")
+            self._conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '3')")
+            self._conn.execute("UPDATE meta SET value = '3' WHERE key = 'schema_version'")
 
     # ── чтение ──────────────────────────────────────────────────────
     def load_all(self, include_trash: bool = False) -> List[Note]:
@@ -167,10 +234,12 @@ class NotesManager:
             )
 
     def purge(self, note_id: int) -> None:
-        """Полное удаление узла и всех его потомков."""
+        """Полное удаление узла и всех его потомков (вместе с их картинками)."""
         ids = self._collect_subtree(note_id)
         with self._lock, self._conn:
             self._conn.executemany("DELETE FROM notes WHERE id = ?", [(i,) for i in ids])
+            # не оставлять осиротевшие blob-картинки удалённых заметок
+            self._conn.executemany("DELETE FROM images WHERE note_id = ?", [(i,) for i in ids])
 
     def _collect_subtree(self, note_id: int) -> List[int]:
         with self._lock:
@@ -180,6 +249,22 @@ class NotesManager:
         for child_id in children:
             result.extend(self._collect_subtree(child_id))
         return result
+
+    # ── вложенные картинки (blob в БД) ───────────────────────────────
+    def add_image(self, note_id: int, name: str, data: bytes) -> int:
+        """Сохранить картинку в БД; вернуть id для placeholder `![name](noteimg:<id>)`."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO images(note_id, name, data, created) VALUES(?, ?, ?, ?)",
+                (note_id, name, data, _now()),
+            )
+            return int(cur.lastrowid)
+
+    def get_image(self, image_id: int) -> Optional[bytes]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT data FROM images WHERE id = ?", (image_id,)).fetchone()
+        return bytes(row["data"]) if row else None
 
     def close(self):
         with self._lock:

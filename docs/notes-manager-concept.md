@@ -27,16 +27,15 @@
 
 ## 3. Хранение
 
-SQLite (stdlib `sqlite3`), файл `notes.db` рядом с exe (портативно, как FlashNote);
-путь переопределяется в `launcher.toml`:
+SQLite (stdlib `sqlite3`), файл `notes.db` по умолчанию в `%APPDATA%\1c_launcher`
+— вне каталога исходников, одинаково для скриптовой и exe-версии (exe не теряет
+данные при пересборке); путь переопределяется в `launcher.toml`:
 
 ```toml
 [notes]
-path = ''              # пусто = notes.db рядом с exe
-hotkey_quick_note = 'Alt+N'
-editor_font = 'JetBrains Mono'
-backup_enabled = true
-backup_period_days = 7
+path = ''              # пусто = %APPDATA%\1c_launcher\notes.db
+panel_width_percent = 80   # доля ширины окна под панель заметок
+zoom_default = 0       # стартовый zoom панели (-8..12)
 ```
 
 Схема (адаптация `notes3`, плюс привязка к базе):
@@ -56,8 +55,8 @@ CREATE TABLE notes(
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);  -- schema_version и пр.
 ```
 
-- **Тело — HTML** через `QTextEdit` (форматирование, списки, ссылки, картинки);
-  поиск по тексту — с удалением HTML-тегов.
+- **Тело — plain text** (решение пользователя; формат для preview определяется
+  движком: md/json/bsl/image/plain).
 - **Миграции**: `meta.schema_version`, стартовая миграция создаёт таблицы.
 
 ## 4. UI: как встроено в дерево лаунчера
@@ -205,20 +204,38 @@ mask = '*.md,*.json,*.bsl,*.png,*.pdf'      # необязательно
 - Код: `src/catalog/` — `catalog_manager` (сканирование, маска, чтение/запись
   с кодировкой), `catalog_tree_builder`, `catalog_mixin` (первый в MRO —
   перехватывает Enter/F4/Del для каталога, делегирует super() вне него).
-- В сборке динамические файлы лежат рядом с exe: `notes.db`, `notes_images/`,
-  `launcher.toml` — в `dist_v2\app\` (проверено контрольной сборкой).
+- В сборке динамические файлы лежат рядом с exe: `launcher.toml` — в `dist_v2\app\`;
+  `notes.db` — по умолчанию в `%APPDATA%\1c_launcher\notes.db` (единый путь для
+  скриптовой и exe-версии; при сборке данные не теряются).
 
-### 11.3 Вставка картинки из буфера (реализовано в v1.1)
+### 11.3 Вставка картинки из буфера (реализовано в v2)
 
-В заметке (режим текста) вставка картинки: файл сохраняется в
-`notes_images/note_<id>/img_<ts>.png` рядом с notes.db, в текст вставляется
-placeholder в md-синтаксисе `![img](путь)` — preview-движок md рендерит картинку.
+Вставленная картинка сохраняется **в БД** (таблица `images`, blob), в текст
+вставляется md-placeholder `![name](noteimg:<id>)`. Preview: движок md рендерит
+`<img src="noteimg:<id>">`, `NoteTextDocument.loadResource` достаёт blob из БД
+через loader и отдаёт `QImage` — файлов на диске нет, работает и в exe-сборке.
+Схема `noteimg:` (без `_`) выбрана потому, что `QUrl` не принимает `_` в scheme
+(RFC 3986) — невалидный URL обнулялся и картинка не показывалась.
 
-### 11.4 Открытые вопросы (для следующей итерации)
+### 11.4 Движки preview (реализовано в v2)
 
-1. Показывать узел «Каталог» по умолчанию или только когда задан `[catalog] path`? — предлагаю: только когда задан.
-2. Внешние редакторы по умолчанию (image → `mspaint`; pdf → системный просмотрщик через `os.startfile`)? — предлагаю `os.startfile` как default.
-3. Подсветка синтаксиса json/bsl в preview — сразу или позже (QSyntaxHighlighter)? — предлагаю позже.
+| Движок | Определение | Preview | F4 (редактирование) |
+|--------|-------------|---------|---------------------|
+| `md` | расширение .md / маркеры | `QTextEdit.setMarkdown` | текст (plain) |
+| `plain` | fallback | plain text | текст |
+| `json` | расширение .json | JSON-подсветка (тёмная) | текст |
+| `bsl` | расширение .bsl/.os | BSL-подсветка (тёмная, &директивы) | текст |
+| `image` | .png/.jpg/.gif/… | картинка из файла/БД | внешнее приложение |
+
+Подсветка — `QSyntaxHighlighter` (`src/notes/engines/highlighters.py`), тёмная
+палитра. Каталог файлов: текстовые — preview/edit, бинарные и картинки —
+внешнее приложение (`os.startfile`).
+
+### 11.5 Открытые вопросы (для следующей итерации)
+
+1. Показывать узел «Каталог» по умолчанию или только когда задан `[catalog] path`? — предлагаю: только когда задан. *(реализовано)*
+2. Внешние редакторы по умолчанию (image → `mspaint`; pdf → системный просмотрщик через `os.startfile`)? — предлагаю `os.startfile` как default. *(реализовано)*
+3. Подсветка синтаксиса json/bsl в preview — сразу или позже (QSyntaxHighlighter)? — предлагаю позже. *(реализовано в v2)*
 4. Нужна ли маска `[catalog] mask` или показывать все файлы?
 
 

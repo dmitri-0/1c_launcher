@@ -70,8 +70,9 @@ class TreeWindow(
         layout.addWidget(self.tree)
 
         # Панель заметок (справа): preview активной заметки / редактирование (F4)
+        from config import NOTES_ZOOM_DEFAULT
         from notes.notes_panel import NotesPanel
-        self.notes_panel = NotesPanel()
+        self.notes_panel = NotesPanel(initial_zoom=int(NOTES_ZOOM_DEFAULT))
         self.notes_panel.hide()
 
         self.splitter = QSplitter(Qt.Horizontal)

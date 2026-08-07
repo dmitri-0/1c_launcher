@@ -331,6 +331,65 @@ def test_engines_render(qt_app):
     assert "Заголовок" in widget.toPlainText()
 
 
+def test_engines_json_bsl_image_detection():
+    from notes.engines import detect_engine, get_engine
+    from notes.engines.bsl_engine import BslEngine
+    from notes.engines.json_engine import JsonEngine
+    from notes.engines.image_engine import ImageEngine
+
+    assert detect_engine("config.json", "") == JsonEngine.name
+    assert detect_engine("module.bsl", "") == BslEngine.name
+    assert detect_engine("photo.png", "") == ImageEngine.name
+    assert detect_engine("photo.JPG", "") == ImageEngine.name
+    assert detect_engine("data.os", "") == BslEngine.name
+    assert detect_engine("readme.md", "") == "md"
+    assert isinstance(get_engine("json"), JsonEngine)
+    assert isinstance(get_engine("bsl"), BslEngine)
+    assert isinstance(get_engine("image"), ImageEngine)
+    assert get_engine("image").supports_editing() is False
+
+
+def test_bsl_highlighter_dark_theme(qt_app):
+    """BslHighlighter не падает на типичном модуле 1С (тёмная палитра)."""
+    from PySide6.QtGui import QTextDocument
+    from notes.engines.highlighters import BslHighlighter
+
+    doc = QTextDocument()
+    hl = BslHighlighter(doc)
+    doc.setPlainText(
+        "&НаКлиенте\n"
+        "Процедура Тест()\n"
+        "    // комментарий\n"
+        "    Стр = \"привет\";\n"
+        "    Если Истина Тогда Возврат; КонецЕсли;\n"
+        "КонецПроцедуры\n"
+    )
+    hl.rehighlight()
+    assert doc.characterCount() > 0  # подсветка отработала без ошибок
+
+
+def test_notes_panel_json_bsl_highlighting(qt_app):
+    """Панель включает подсветку для bsl/json и отключает для прочих движков."""
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    bsl = Note(id=1, pid=0, name="module.bsl", note="Процедура Тест()\nКонецПроцедуры", pos=0,
+               created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(bsl)
+    assert panel._highlighter is not None          # bsl → подсветка включена
+    md = Note(id=2, pid=0, name="x.md", note="# Заголовок", pos=1,
+              created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(md)
+    assert panel._highlighter is None              # md → подсветка отключена
+
+
+def test_config_notes_zoom_default():
+    import config
+
+    settings = config.load_settings(config.find_config_file())
+    assert config.NOTES_ZOOM_DEFAULT == settings["notes"].get("zoom_default", 0)
+
+
 def test_notes_panel_zoom_buttons(qt_app):
     from notes.notes_panel import NotesPanel
 

@@ -44,8 +44,9 @@ def _default_settings() -> dict:
             "vk": 0x44,           # D
         },
         "notes": {
-            "path": "",  # пусто = notes.db рядом с exe
+            "path": "",  # пусто = %APPDATA%\1c_launcher\notes.db
             "panel_width_percent": 80,  # доля ширины окна для панели заметок
+            "zoom_default": 0,          # стартовый zoom панели (ступени, -8..12)
         },
         "catalog": {
             "path": "",  # пусто = узел «📂 Каталог» скрыт
@@ -194,6 +195,11 @@ def _merge(settings: dict, data: dict) -> None:
                 settings["notes"]["panel_width_percent"] = int(notes["panel_width_percent"])
             except (TypeError, ValueError):
                 pass  # некорректное значение — оставляем дефолт
+        if "zoom_default" in notes:
+            try:
+                settings["notes"]["zoom_default"] = int(notes["zoom_default"])
+            except (TypeError, ValueError):
+                pass
 
     catalog = data.get("catalog")
     if isinstance(catalog, dict):
@@ -283,6 +289,9 @@ NOTES_PATH = _SETTINGS["notes"].get("path", "")
 
 # Доля ширины окна для панели заметок (в процентах, 20–95).
 NOTES_PANEL_WIDTH_PERCENT = _SETTINGS["notes"].get("panel_width_percent", 80)
+
+# Стартовый zoom панели заметок (ступени, -8..12).
+NOTES_ZOOM_DEFAULT = _SETTINGS["notes"].get("zoom_default", 0)
 
 # Каталог файлов (узел «📂 Каталог»): корень и маска расширений.
 # Пустой path — узел скрыт.
