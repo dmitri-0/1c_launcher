@@ -43,6 +43,25 @@ def _default_settings() -> dict:
             "modifiers": 0x0001,  # MOD_ALT
             "vk": 0x44,           # D
         },
+        "highlighting": {
+            # Ключевые слова BSL для подсветки (пробелораздельный список).
+            "bsl_keywords": (
+                "Процедура КонецПроцедуры Функция КонецФункции Если ИначеЕсли Иначе "
+                "КонецЕсли Тогда Для Каждого По Цикл КонецЦикла Пока Возврат Новый "
+                "Перем Экспорт И Или Не Истина Ложь Неопределено Попытка Исключение "
+                "КонецПопытки Перейти Продолжить Прервать Выполнить ВызватьИсключение "
+                "ИначеИначе"
+            ),
+        },
+        "notes": {
+            "path": "",  # пусто = %APPDATA%\1c_launcher\notes.db
+            "panel_width_percent": 80,  # доля ширины окна для панели заметок
+            "zoom_default": 0,          # стартовый zoom панели (ступени, -8..12)
+        },
+        "catalog": {
+            "path": "",  # пусто = узел «📂 Каталог» скрыт
+            "mask": "",  # пусто = все файлы; иначе список расширений ".md,.json"
+        },
         # Отслеживаемые приложения для узла "Основное"
         "tracked_applications": [
             {
@@ -138,7 +157,7 @@ def _parse_modifiers(value) -> int:
             if bit:
                 result |= bit
             else:
-                print(f"⚠️ {CONFIG_FILE_NAME}: неизвестный модификатор '{part}' — проигнорирован")
+                print(f"{CONFIG_FILE_NAME}: неизвестный модификатор '{part}' — проигнорирован")
         return result
     return 0x0001
 
@@ -150,7 +169,7 @@ def _parse_vk(value) -> int:
     try:
         return int(str(value), 0)
     except ValueError:
-        print(f"⚠️ {CONFIG_FILE_NAME}: неверный VK '{value}' — используется 0x44 (D)")
+        print(f"{CONFIG_FILE_NAME}: неверный VK '{value}' — используется 0x44 (D)")
         return 0x44
 
 
@@ -176,6 +195,39 @@ def _merge(settings: dict, data: dict) -> None:
             settings["hotkey"]["modifiers"] = _parse_modifiers(hotkey["modifiers"])
         if "vk" in hotkey:
             settings["hotkey"]["vk"] = _parse_vk(hotkey["vk"])
+
+    highlighting = data.get("highlighting")
+    if isinstance(highlighting, dict):
+        if "bsl_keywords" in highlighting:
+            kw = highlighting["bsl_keywords"]
+            if isinstance(kw, (list, tuple)):
+                # TOML-массив строк тоже допустим: ["Процедура", "Функция", ...]
+                kw = " ".join(str(x) for x in kw)
+            kw = str(kw).strip()
+            if kw:
+                settings["highlighting"]["bsl_keywords"] = kw
+
+    notes = data.get("notes")
+    if isinstance(notes, dict):
+        if "path" in notes:
+            settings["notes"]["path"] = str(notes["path"])
+        if "panel_width_percent" in notes:
+            try:
+                settings["notes"]["panel_width_percent"] = int(notes["panel_width_percent"])
+            except (TypeError, ValueError):
+                pass  # некорректное значение — оставляем дефолт
+        if "zoom_default" in notes:
+            try:
+                settings["notes"]["zoom_default"] = int(notes["zoom_default"])
+            except (TypeError, ValueError):
+                pass
+
+    catalog = data.get("catalog")
+    if isinstance(catalog, dict):
+        if "path" in catalog:
+            settings["catalog"]["path"] = str(catalog["path"])
+        if "mask" in catalog:
+            settings["catalog"]["mask"] = str(catalog["mask"])
 
     apps = data.get("tracked_applications")
     if isinstance(apps, list) and apps:
@@ -210,16 +262,16 @@ def load_settings(config_path: Optional[os.PathLike] = None) -> dict:
         return settings
 
     if tomllib is None:
-        print("⚠️ Для чтения launcher.toml нужен Python 3.11+ (tomllib) — используются встроенные настройки.")
+        print("Для чтения launcher.toml нужен Python 3.11+ (tomllib) — используются встроенные настройки.")
         return settings
 
     try:
         with open(path, "rb") as f:
             data = tomllib.load(f)
         _merge(settings, data)
-        print(f"✅ Настройки загружены из: {path}")
+        print(f"Настройки загружены из: {path}")
     except Exception as e:
-        print(f"⚠️ Ошибка чтения настроек {path}: {e} — используются встроенные значения")
+        print(f"Ошибка чтения настроек {path}: {e} — используются встроенные значения")
     return settings
 
 
@@ -252,6 +304,23 @@ DBM_API_DIR = _SETTINGS["dbm_api_dir"]
 # Настраивается в launcher.toml ([hotkey]) — читается динамически.
 GLOBAL_HOTKEY_MODIFIERS = _SETTINGS["hotkey"]["modifiers"]
 GLOBAL_HOTKEY_VK = _SETTINGS["hotkey"]["vk"]
+
+# Путь к БД заметок (SQLite). Пустая строка = notes.db рядом с exe/модулем.
+NOTES_PATH = _SETTINGS["notes"].get("path", "")
+
+# Ключевые слова BSL для подсветки (из [highlighting] bsl_keywords).
+BSL_KEYWORDS = _SETTINGS["highlighting"]["bsl_keywords"].split()
+
+# Доля ширины окна для панели заметок (в процентах, 20–95).
+NOTES_PANEL_WIDTH_PERCENT = _SETTINGS["notes"].get("panel_width_percent", 80)
+
+# Стартовый zoom панели заметок (ступени, -8..12).
+NOTES_ZOOM_DEFAULT = _SETTINGS["notes"].get("zoom_default", 0)
+
+# Каталог файлов (узел «📂 Каталог»): корень и маска расширений.
+# Пустой path — узел скрыт.
+CATALOG_PATH = _SETTINGS["catalog"].get("path", "")
+CATALOG_MASK = _SETTINGS["catalog"].get("mask", "")
 
 # Отслеживаемые приложения для узла "Основное"
 TRACKED_APPLICATIONS = _SETTINGS["tracked_applications"]

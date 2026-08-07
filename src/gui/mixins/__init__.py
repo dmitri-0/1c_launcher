@@ -7,6 +7,8 @@ from .dbm_mixin import DbmMixin
 from .digit_navigation_mixin import DigitNavigationMixin
 from .apache_manager_mixin import ApacheManagerMixin
 from .snapshots_update_mixin import SnapshotsUpdateMixin
+from .notes_mixin import NotesMixin
+from .catalog_mixin import CatalogMixin
 
 __all__ = [
     "TrayMixin",
@@ -18,4 +20,6 @@ __all__ = [
     "DigitNavigationMixin",
     "ApacheManagerMixin",
     "SnapshotsUpdateMixin",
+    "NotesMixin",
+    "CatalogMixin",
 ]

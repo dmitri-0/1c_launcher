@@ -1,0 +1,747 @@
+"""Тесты менеджера заметок (SQLite) и интеграции «📝 Заметки» в лаунчер."""
+
+from pathlib import Path
+
+from notes.notes_manager import NotesManager, Note, guess_note_format
+
+
+# ── формат (preview) ──────────────────────────────────────────────────
+def test_guess_format_md_by_extension():
+    assert guess_note_format("todo.md", "some text") == "md"
+    assert guess_note_format("README.markdown", "text") == "md"
+
+
+def test_guess_format_md_by_markers():
+    assert guess_note_format("Заметка", "# Заголовок\nтекст") == "md"
+    assert guess_note_format("Заметка", "- пункт списка") == "md"
+    assert guess_note_format("Заметка", "**жирный** текст") == "md"
+    assert guess_note_format("Заметка", "> цитата") == "md"
+
+
+def test_guess_format_plain_fallback():
+    # не распознан формат → plain text (пока движок понимает только md)
+    assert guess_note_format("Заметка", "просто текст без разметки") == "plain"
+    assert guess_note_format("Заметка", "") == "plain"
+
+
+# ── SQLite-хранилище ─────────────────────────────────────────────────
+def test_create_and_load(tmp_path):
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        note_id = mgr.create("Первая", "текст заметки")
+        assert note_id > 0
+        note = mgr.get(note_id)
+        assert note.name == "Первая"
+        assert note.note == "текст заметки"
+        assert note.type == 0
+        assert note.trash == 0
+        assert mgr.load_all() == [note]
+    finally:
+        mgr.close()
+
+
+def test_tree_and_folders(tmp_path):
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        folder_id = mgr.create("Папка", type_=1)
+        child_id = mgr.create("Внутри", pid=folder_id)
+        root_note_id = mgr.create("Отдельная")
+        assert mgr.get(folder_id).is_folder
+        assert mgr.get(child_id).pid == folder_id
+        assert {n.id for n in mgr.load_all()} == {folder_id, child_id, root_note_id}
+    finally:
+        mgr.close()
+
+
+def test_update_rename_and_text(tmp_path):
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        note_id = mgr.create("Имя")
+        mgr.update(note_id, name="Новое имя")
+        mgr.update(note_id, note="новый текст")
+        note = mgr.get(note_id)
+        assert note.name == "Новое имя"
+        assert note.note == "новый текст"
+        assert note.modified >= note.created
+    finally:
+        mgr.close()
+
+
+def test_trash_hides_note(tmp_path):
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        note_id = mgr.create("Скрыть")
+        assert mgr.load_all()
+        mgr.delete_to_trash(note_id)
+        assert mgr.load_all() == []            # из дерева скрыта
+        assert mgr.get(note_id).trash == 1     # но не удалена
+        mgr.restore(note_id)
+        assert len(mgr.load_all()) == 1
+    finally:
+        mgr.close()
+
+
+def test_trash_folder_cascades_to_children(tmp_path):
+    """Удаление папки в корзину не осиротляет детей: они тоже получают trash=1."""
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        folder_id = mgr.create("Папка", type_=1)
+        child_id = mgr.create("Дочка", pid=folder_id)
+        mgr.delete_to_trash(folder_id)
+        assert mgr.get(folder_id).trash == 1
+        assert mgr.get(child_id).trash == 1
+    finally:
+        mgr.close()
+
+
+def test_purge_subtree(tmp_path):
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        folder_id = mgr.create("Папка", type_=1)
+        child_id = mgr.create("Дочка", pid=folder_id)
+        other_id = mgr.create("Другая")
+        mgr.purge(folder_id)
+        remaining = {n.id for n in mgr.load_all(include_trash=True)}
+        assert remaining == {other_id}
+        assert mgr.get(child_id) is None
+    finally:
+        mgr.close()
+
+
+def test_schema_recreated(tmp_path):
+    """Повторное открытие той же БД не ломает схему."""
+    path = tmp_path / "notes.db"
+    NotesManager(path).close()
+    mgr = NotesManager(path)
+    try:
+        note_id = mgr.create("После переоткрытия")
+        assert mgr.get(note_id).name == "После переоткрытия"
+    finally:
+        mgr.close()
+
+
+def test_update_caret_roundtrip(tmp_path):
+    """Позиция курсора хранится в БД и восстанавливается."""
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        note_id = mgr.create("Заметка", "текст")
+        assert mgr.get(note_id).caret == 0
+        mgr.update(note_id, caret=7)
+        assert mgr.get(note_id).caret == 7
+        mgr.update(note_id, note="новый текст", caret=3)
+        note = mgr.get(note_id)
+        assert note.note == "новый текст"
+        assert note.caret == 3
+    finally:
+        mgr.close()
+
+
+def test_migration_adds_caret_column(tmp_path):
+    """Старая БД (без колонки caret) при открытии мигрируется."""
+    import sqlite3
+
+    path = tmp_path / "notes.db"
+    con = sqlite3.connect(str(path))
+    con.execute(
+        "CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, pid INTEGER NOT NULL DEFAULT 0,"
+        " name TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', pos INTEGER NOT NULL DEFAULT 0,"
+        " created TEXT NOT NULL DEFAULT '', modified TEXT NOT NULL DEFAULT '',"
+        " trash INTEGER NOT NULL DEFAULT 0, type INTEGER NOT NULL DEFAULT 0)"
+    )
+    con.commit()
+    con.close()
+
+    mgr = NotesManager(path)
+    try:
+        cols = [row[1] for row in mgr._conn.execute("PRAGMA table_info(notes)").fetchall()]
+        assert "caret" in cols
+        note_id = mgr.create("После миграции")
+        assert mgr.get(note_id).caret == 0
+    finally:
+        mgr.close()
+
+
+# ── панель preview/редактирования ───────────────────────────────────
+def test_notes_panel_preview_default_and_edit(qt_app):
+    from notes.notes_panel import NotesPanel
+
+    raw = "# Заголовок\nтекст"
+    panel = NotesPanel()
+    note = Note(id=1, pid=0, name="Заметка.md", note=raw, pos=0,
+                created="", modified="", trash=0, type=0, caret=5)
+    panel.show_note(note)
+    assert panel.is_edit_mode() is False          # по умолчанию — preview
+    assert panel.body.isReadOnly() is True
+    assert panel.get_text() == raw                # сырой текст не теряется
+
+    panel.enter_edit(caret=5)
+    assert panel.is_edit_mode() is True
+    assert panel.body.isReadOnly() is False
+    assert panel.body.textCursor().position() == 5  # позиция курсора восстановлена
+
+    panel.body.insertPlainText("X")               # вставка в позицию курсора (5)
+    expected = raw[:5] + "X" + raw[5:]
+    assert panel.get_text() == expected
+    assert panel.current_caret() == 6
+
+    panel.enter_preview()
+    assert panel.get_text() == expected           # текст сохранился после выхода из режима
+    assert panel.body.isReadOnly() is True
+
+
+def test_notes_panel_switch_note_while_editing(qt_app):
+    """Регрессия: переключение заметки во время редактирования не должно
+    заносить текст старой заметки в новую (show_note выходит из режима правки)."""
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    note_a = Note(id=1, pid=0, name="A", note="текст A", pos=0,
+                  created="", modified="", trash=0, type=0, caret=0)
+    note_b = Note(id=2, pid=0, name="B", note="текст B", pos=1,
+                  created="", modified="", trash=0, type=0, caret=0)
+
+    panel.show_note(note_a)
+    panel.enter_edit(caret=0)
+    panel.body.setPlainText("отредактировано A")   # правим A
+
+    panel.show_note(note_b)                        # переключаемся на B
+    assert panel.is_edit_mode() is False           # вышли из режима правки
+    assert panel.get_text() == "текст B"           # НЕ текст A
+    assert panel.title_label.text() == "B"
+
+
+def test_notes_panel_plain_format_fallback(qt_app):
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    note = Note(id=2, pid=0, name="Просто заметка", note="без разметки", pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    assert panel.get_text() == "без разметки"
+    assert panel.is_edit_mode() is False
+
+
+def test_notes_handlers_delegate_outside_notes_node():
+    """Регрессия: NotesMixin (первый в MRO TreeWindow) не должен съедать
+    Enter/F4/Del для баз — вне узла заметок делегирует super() (ShortcutsMixin)."""
+    from gui.mixins.notes_mixin import NotesMixin
+
+    calls = []
+
+    class _Base:
+        def handle_enter(self):
+            calls.append("enter")
+
+        def handle_delete(self):
+            calls.append("delete")
+
+        def handle_f4(self):
+            calls.append("f4")
+
+    class _FakeTree:
+        def currentIndex(self):
+            return object()
+
+        def isExpanded(self, index):
+            return False
+
+        def setExpanded(self, index, expand):
+            calls.append("expand")
+
+    class _Stub(NotesMixin, _Base):
+        def __init__(self):
+            self._sel = (None, None)
+            self._tree = _FakeTree()
+
+        def _selected_note_item(self):
+            return self._sel
+
+        @property
+        def tree(self):
+            return self._tree
+
+    s = _Stub()
+
+    # вне узла заметок (база/процесс) → делегирование ShortcutsMixin-логике
+    s.handle_enter()
+    s.handle_delete()
+    s.handle_f4()
+    assert calls == ["enter", "delete", "f4"]
+
+    # в узле заметок: папка — раскрытие, делегирования нет
+    s._sel = (object(), Note(id=1, pid=0, name="Папка", note="", pos=0,
+                             created="", modified="", trash=0, type=1))
+    calls.clear()
+    s.handle_enter()
+    assert calls == ["expand"]
+    calls.clear()
+    s.handle_f4()          # папка — съедаем F4, но не редактируем
+    assert calls == []
+
+
+def test_note_under_note_builds_tree(tmp_path):
+    """Заметки можно вкладывать в заметки — дерево строится по pid независимо от type."""
+    from PySide6.QtGui import QStandardItemModel
+    from notes.notes_tree_builder import NotesTreeBuilder
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        parent_id = mgr.create("Родитель", "текст родителя", type_=0)   # заметка
+        mgr.create("Ребёнок", pid=parent_id, type_=0)                   # вложенная заметка
+        node = NotesTreeBuilder(QStandardItemModel(), mgr).build_node()
+        assert node.rowCount() == 1
+        parent_item = node.child(0, 0)
+        assert parent_item.text() == "Родитель"
+        assert parent_item.child(0, 0).text() == "Ребёнок"
+    finally:
+        mgr.close()
+
+
+def test_config_notes_panel_width():
+    import config
+
+    settings = config.load_settings(config.find_config_file())
+    percent = config.NOTES_PANEL_WIDTH_PERCENT
+    assert percent == settings["notes"].get("panel_width_percent", 80)
+
+
+# ── движки рендеринга ───────────────────────────────────────────────
+def test_engines_detect_and_fallback():
+    from notes.engines import detect_engine, get_engine
+    from notes.engines.plain_engine import PlainTextEngine
+    from notes.engines.md_engine import MarkdownEngine
+
+    assert detect_engine("todo.md", "текст") == MarkdownEngine.name
+    assert detect_engine("Заметка", "# Заголовок") == MarkdownEngine.name
+    assert detect_engine("Заметка", "просто текст") == PlainTextEngine.name
+    assert isinstance(get_engine("md"), MarkdownEngine)
+    assert isinstance(get_engine("неизвестный"), PlainTextEngine)   # fallback
+    assert isinstance(get_engine(""), PlainTextEngine)
+    assert get_engine("md").supports_editing() is True
+
+
+def test_engines_render(qt_app):
+    from notes.engines import get_engine
+    from PySide6.QtWidgets import QTextEdit
+
+    widget = QTextEdit()
+    get_engine("plain").render(widget, "просто текст", "x")
+    assert widget.toPlainText() == "просто текст"
+    get_engine("md").render(widget, "# Заголовок", "x.md")
+    assert "Заголовок" in widget.toPlainText()
+
+
+def test_engines_json_bsl_image_detection():
+    from notes.engines import detect_engine, get_engine
+    from notes.engines.bsl_engine import BslEngine
+    from notes.engines.json_engine import JsonEngine
+    from notes.engines.image_engine import ImageEngine
+
+    assert detect_engine("config.json", "") == JsonEngine.name
+    assert detect_engine("module.bsl", "") == BslEngine.name
+    assert detect_engine("photo.png", "") == ImageEngine.name
+    assert detect_engine("photo.JPG", "") == ImageEngine.name
+    assert detect_engine("data.os", "") == BslEngine.name
+    assert detect_engine("readme.md", "") == "md"
+    assert isinstance(get_engine("json"), JsonEngine)
+    assert isinstance(get_engine("bsl"), BslEngine)
+    assert isinstance(get_engine("image"), ImageEngine)
+    assert get_engine("image").supports_editing() is False
+
+
+def test_bsl_highlighter_dark_theme(qt_app):
+    """BslHighlighter не падает на типичном модуле 1С (тёмная палитра)."""
+    from PySide6.QtGui import QTextDocument
+    from notes.engines.highlighters import BslHighlighter
+
+    doc = QTextDocument()
+    hl = BslHighlighter(doc)
+    doc.setPlainText(
+        "&НаКлиенте\n"
+        "Процедура Тест()\n"
+        "    // комментарий\n"
+        "    Стр = \"привет\";\n"
+        "    Если Истина Тогда Возврат; КонецЕсли;\n"
+        "КонецПроцедуры\n"
+    )
+    hl.rehighlight()
+    assert doc.characterCount() > 0  # подсветка отработала без ошибок
+
+
+def test_notes_panel_json_bsl_highlighting(qt_app):
+    """Панель включает подсветку для bsl/json и отключает для прочих движков."""
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    bsl = Note(id=1, pid=0, name="module.bsl", note="Процедура Тест()\nКонецПроцедуры", pos=0,
+               created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(bsl)
+    assert panel._highlighter is not None          # bsl → подсветка включена
+    md = Note(id=2, pid=0, name="x.md", note="# Заголовок", pos=1,
+              created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(md)
+    assert panel._highlighter is None              # md → подсветка отключена
+
+
+def test_config_notes_zoom_default():
+    import config
+
+    settings = config.load_settings(config.find_config_file())
+    assert config.NOTES_ZOOM_DEFAULT == settings["notes"].get("zoom_default", 0)
+
+
+def test_notes_panel_zoom_buttons(qt_app):
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    note = Note(id=1, pid=0, name="Z", note="текст", pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    base = panel._base_pt
+    assert panel._zoom == 0
+
+    panel.change_zoom(1)
+    assert panel._zoom == 1
+    assert panel.body.font().pointSizeF() > base          # шрифт вырос
+
+    panel.change_zoom(-2)
+    assert panel._zoom == -1                               # 1 - 2 = -1 (ступени непрерывны)
+    panel.change_zoom(0, reset=True)
+    assert panel._zoom == 0
+    assert panel.body.font().pointSizeF() == base          # сброс вернул базовый размер
+
+    # в редактировании zoom тоже меняет шрифт, текст не теряется
+    panel.enter_edit(caret=0)
+    panel.change_zoom(2)
+    assert panel.is_edit_mode()
+    assert panel.get_text() == "текст"
+
+
+def test_notes_panel_image_paste_placeholder(qt_app):
+    from notes.notes_panel import NotesPanel
+    from PySide6.QtGui import QImage
+    from PySide6.QtCore import QMimeData
+
+    saved = []
+    panel = NotesPanel()
+    panel.image_handler = lambda img: saved.append(img) or "[IMG]"
+    panel.enter_edit(caret=0)
+    mime = QMimeData()
+    mime.setImageData(QImage(8, 8, QImage.Format.Format_ARGB32))
+    panel.body.insertFromMimeData(mime)
+    assert saved, "image_handler должен был вызваться"
+    assert panel.body.toPlainText() == "[IMG]"             # placeholder вместо картинки
+
+
+def test_mixin_image_handler_wired():
+    from gui.mixins.notes_mixin import NotesMixin
+
+    assert hasattr(NotesMixin, "_save_note_image")
+    assert hasattr(NotesMixin, "_switch_focus")
+
+
+# ── интеграция в GUI ─────────────────────────────────────────────────
+def test_builder_builds_tree_from_db(tmp_path):
+    from PySide6.QtGui import QStandardItemModel
+    from notes.notes_tree_builder import NotesTreeBuilder
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        folder_id = mgr.create("Папка", type_=1)
+        mgr.create("Внутри", pid=folder_id)
+        mgr.create("Отдельная")
+        node = NotesTreeBuilder(QStandardItemModel(), mgr).build_node()
+        assert node.rowCount() == 2                       # папка выше заметки
+        assert node.child(0, 0).text() == "Папка"
+        assert node.child(0, 0).child(0, 0).text() == "Внутри"
+        assert node.child(1, 0).text() == "Отдельная"
+    finally:
+        mgr.close()
+
+
+def test_ensure_notes_node_idempotent(tmp_path):
+    from PySide6.QtGui import QStandardItemModel
+    from PySide6.QtCore import Qt
+    from notes.notes_tree_builder import NotesTreeBuilder, NOTES_ROOT_DATA
+    from gui.mixins.notes_mixin import NotesMixin
+
+    class Stub(NotesMixin):
+        def __init__(self, model, mgr):
+            self.model = model
+            self.notes_manager = mgr
+            self.notes_builder = NotesTreeBuilder(model, mgr)
+
+    model = QStandardItemModel()
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        mgr.create("Заметка")
+        stub = Stub(model, mgr)
+        stub.ensure_notes_node()
+        rows_first = model.rowCount()
+        assert rows_first == 1
+        stub.ensure_notes_node()
+        assert model.rowCount() == rows_first            # повторный вызов не плодит узлы
+        assert model.item(0, 0).data(Qt.UserRole) == NOTES_ROOT_DATA
+    finally:
+        mgr.close()
+
+
+def test_dialog_preview_roundtrip(qt_app):
+    """F4-preview не теряет сырой текст: get_data всегда возвращает plain."""
+    from notes.notes_dialog import NotesDialog
+
+    raw = "# Заголовок\n**жирный** текст"
+    dlg = NotesDialog(title="Заметка.md", text=raw)
+    dlg.toggle_preview()                                  # → preview (markdown)
+    assert dlg.get_data() == ("Заметка.md", raw)
+    dlg.toggle_preview()                                  # → редактирование
+    assert dlg.get_data() == ("Заметка.md", raw)
+
+
+def test_notes_mixin_registered_in_tree_window():
+    from gui.tree_window import TreeWindow
+    from gui.mixins import NotesMixin
+
+    assert NotesMixin in TreeWindow.__mro__
+    assert hasattr(TreeWindow, "ensure_notes_node")
+    assert hasattr(TreeWindow, "handle_enter")
+    assert hasattr(TreeWindow, "init_notes")
+    assert hasattr(TreeWindow, "_toggle_notes_edit")
+    assert hasattr(TreeWindow, "_save_current_note")
+    assert hasattr(TreeWindow, "handle_f4")
+
+
+def test_config_notes_path_default():
+    import config
+
+    # Самосогласованность: константа == значению из найденного launcher.toml
+    # (устойчиво к тому, что оператор пропишет свой путь в [notes] path)
+    settings = config.load_settings(config.find_config_file())
+    assert config.NOTES_PATH == settings["notes"].get("path", "")
+
+def test_md_detection_image_placeholder_only(qt_app):
+    """Заметка, содержащая ТОЛЬКО placeholder картинки, рендерится как md
+    (иначе картинка не показывалась — «нажал F4 — ничего»)."""
+    from notes.engines import detect_engine
+    from notes.engines.md_engine import MarkdownEngine
+    from PySide6.QtWidgets import QTextEdit
+
+    assert detect_engine("Новая заметка", "![фото](noteimg:42)") == MarkdownEngine.name
+    assert "![" in MarkdownEngine.MARKERS
+
+
+def test_paste_image_without_active_note_no_corruption(qt_app):
+    """Вставка картинки при недоступном обработчике НЕ вставляет image-объект
+    (символ \\ufffc «затирал» текст заметки — заметка становилась пустой)."""
+    from PySide6.QtGui import QImage
+    from PySide6.QtCore import QMimeData
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    panel.enter_edit(caret=0)
+    panel.body.setPlainText("текст до вставки")
+    panel.body.image_handler = lambda img: ""  # обработчик «не сработал»
+    mime = QMimeData()
+    mime.setImageData(QImage(8, 8, QImage.Format.Format_ARGB32))
+    panel.body.insertFromMimeData(mime)
+    assert "\ufffc" not in panel.body.toPlainText()
+    assert panel.body.toPlainText() == "текст до вставки"  # текст не тронут
+
+
+def test_bsl_keywords_from_config(qt_app):
+    """Ключевые слова BSL — из config ([highlighting] bsl_keywords), включая «Тогда»."""
+    import config
+    from notes.engines.highlighters import BslHighlighter
+
+    assert "Тогда" in config.BSL_KEYWORDS
+    assert set(config.BSL_KEYWORDS) <= set(BslHighlighter.KEYWORDS)
+
+
+def test_bsl_method_navigator(qt_app):
+    """Навигатор: extract_bsl_methods + combo для bsl + переход курсора к методу."""
+    from PySide6.QtGui import QTextCursor
+    from notes.notes_panel import NotesPanel
+    from notes.notes_manager import Note
+    from notes.engines.bsl_engine import extract_bsl_methods
+
+    text = (
+        "Процедура Первая()\n"
+        "    // комментарий\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Функция Вторая(Парам)\n"
+        "    Возврат Истина;\n"
+        "КонецФункции\n"
+        "// Процедура НеМетод() — комментарий не матчится\n"
+    )
+    methods = extract_bsl_methods(text)
+    assert methods == [(1, "Процедура", "Первая"), (5, "Функция", "Вторая")]
+
+    panel = NotesPanel()
+    note = Note(id=1, pid=0, name="module.bsl", note=text, pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    assert not panel.methods_combo.isHidden()  # combo видим (не скрыт явно)
+    assert panel._method_lines == [1, 5]
+    panel._jump_to_method(1)  # вторая строка списка → метод «Вторая» (строка 5)
+    assert panel.body.textCursor().blockNumber() == 4
+
+
+def test_json_pretty_preview(qt_app):
+    """JSON на preview переформатируется (indent=2); невалидный — как есть."""
+    from PySide6.QtWidgets import QTextEdit
+    from notes.engines import get_engine
+
+    widget = QTextEdit()
+    get_engine("json").render(widget, '{"a":1,"b":[1,2]}', "x.json")
+    assert '  "a": 1' in widget.toPlainText()
+    assert "\n" in widget.toPlainText()
+    get_engine("json").render(widget, "{невалидный", "x.json")
+    assert widget.toPlainText() == "{невалидный"
+
+
+def test_xml_engine_pretty_and_detection(qt_app):
+    """XML: детекция по .xml, pretty-форматирование, подсветка."""
+    from PySide6.QtWidgets import QTextEdit
+    from notes.engines import detect_engine, get_engine
+    from notes.engines.xml_engine import XmlEngine
+    from notes.notes_panel import NotesPanel
+    from notes.notes_manager import Note
+
+    assert detect_engine("config.xml", "") == "xml"
+    assert isinstance(get_engine("xml"), XmlEngine)
+
+    widget = QTextEdit()
+    get_engine("xml").render(widget, "<root><a x=\"1\">t</a></root>", "x.xml")
+    assert "<root>" in widget.toPlainText()
+    assert "\n" in widget.toPlainText()  # переформатирован
+    get_engine("xml").render(widget, "<root>", "x.xml")  # невалидный
+    assert widget.toPlainText() == "<root>"
+
+    panel = NotesPanel()
+    note = Note(id=2, pid=0, name="a.xml", note="<r><c/></r>", pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    assert panel._highlighter is not None  # XmlHighlighter включён
+
+def test_scroll_roundtrip(tmp_path):
+    """Позиция скролла заметки и файла каталога — в meta БД (px, 0 не хранится)."""
+    from notes.notes_manager import NotesManager
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        nid = mgr.create("Заметка")
+        assert mgr.get_note_scroll(nid) == 0
+        mgr.set_note_scroll(nid, 350)
+        assert mgr.get_note_scroll(nid) == 350
+        mgr.set_path_scroll(r"C:\work\a.bsl", 120)
+        assert mgr.get_path_scroll(r"C:\work\a.bsl") == 120
+        mgr.set_note_scroll(nid, 0)  # 0 = «не сохранено» → остаётся старое
+        assert mgr.get_note_scroll(nid) == 350
+    finally:
+        mgr.close()
+
+
+def test_panel_scroll_restore(qt_app):
+    """Скролл md-документа восстанавливается после переключения заметок."""
+    from PySide6.QtWidgets import QApplication
+    from notes.notes_panel import NotesPanel
+    from notes.notes_manager import Note
+
+    panel = NotesPanel()
+    panel.resize(500, 600)  # дать вьюпорту реальный размер (иначе max=0)
+    saved = {}
+    panel.scroll_key = "note:7"
+    panel.scroll_load = lambda k: saved.get(k, 0)
+    panel.scroll_save = lambda k, p: saved.__setitem__(k, p)
+
+    long = "\n".join(f"Строка {i}" for i in range(400))
+    note = Note(id=7, pid=0, name="big.md", note=long, pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    QApplication.processEvents()
+    bar = panel.body.verticalScrollBar()
+    assert bar.maximum() > 0
+    bar.setValue(bar.maximum())
+    pos = panel.current_scroll()
+    assert pos > 0
+    panel.scroll_save(panel.scroll_key, pos)  # как делает миксин при уходе
+
+    other = Note(id=8, pid=0, name="x.md", note="# Другая", pos=1,
+                 created="", modified="", trash=0, type=0, caret=0)
+    panel.scroll_key = "note:8"
+    panel.show_note(other)
+    QApplication.processEvents()
+    assert bar.value() == 0  # новая заметка — сверху
+
+    panel.scroll_key = "note:7"
+    panel.show_note(note)
+    QApplication.processEvents()  # singleShot(0) восстановления
+    assert bar.value() == pos
+
+
+def test_explicit_bad_db_falls_back_to_default(monkeypatch, tmp_path):
+    """Битый файл по явному пути НЕ отключает заметки — fallback на дефолтный."""
+    from notes import notes_manager as nm
+
+    bad = tmp_path / "bad.db"
+    bad.write_bytes(b"NOT A SQLITE DATABASE")
+    default = tmp_path / "default_notes.db"
+    monkeypatch.setattr(nm, "_default_db_path", lambda: default)
+    monkeypatch.setattr(nm, "_legacy_db_candidates", lambda: [])  # без реальных данных
+
+    mgr = nm.NotesManager(bad)  # явный путь → битый → fallback
+    try:
+        assert mgr.init_error is not None
+        assert "не удалось открыть" in mgr.init_error
+        assert mgr.db_path == bad          # запрошенный путь запомнен
+        mgr.create("Работает и на дефолте")
+        assert [n.name for n in mgr.load_all()] == ["Работает и на дефолте"]
+    finally:
+        mgr.close()
+    assert default.exists()
+
+def test_path_pointing_to_directory_uses_notes_db_inside(tmp_path):
+    """[notes] path может указывать на КАТАЛОГ — берётся notes.db внутри него."""
+    from notes.notes_manager import NotesManager
+
+    d = tmp_path / "data_dir"
+    d.mkdir()
+    mgr = NotesManager(d)  # явный путь-каталог
+    try:
+        assert mgr.db_path == d / "notes.db"
+        mgr.create("В каталоге")
+        assert len(mgr.load_all()) == 1
+        assert (d / "notes.db").exists()
+    finally:
+        mgr.close()
+
+def test_note_text_survives_switch_away_and_back(qt_app, monkeypatch, tmp_path):
+    """Отредактированный текст виден после A→B→A: панель показывает свежие
+    данные из БД, а не устаревший снимок из элемента дерева."""
+    from notes import notes_manager as nm
+    monkeypatch.setattr(nm, "NOTES_PATH", str(tmp_path / "notes.db"))
+    monkeypatch.setattr(nm, "_legacy_db_candidates", lambda: [])
+
+    from gui.tree_window import TreeWindow
+    win = TreeWindow()
+    try:
+        mgr = win.notes_manager
+        nid = mgr.create("Заметка A")
+        nid2 = mgr.create("Заметка B")
+        win.ensure_notes_node()
+
+        # A → F4 → ввод → F4 (сохранение в БД)
+        win.open_note(nid)
+        win.handle_f4()
+        win.notes_panel.body.setPlainText("ТЕКСТ В ЗАМЕТКЕ A")
+        win.handle_f4()
+        assert mgr.get(nid).note == "ТЕКСТ В ЗАМЕТКЕ A"  # в БД сохранено
+
+        # A → B → A: панель должна показать сохранённый текст
+        win.open_note(nid2)
+        win.open_note(nid)
+        assert win.notes_panel._raw == "ТЕКСТ В ЗАМЕТКЕ A"
+        assert win.notes_panel.body.toPlainText() == "ТЕКСТ В ЗАМЕТКЕ A"
+    finally:
+        win.close()

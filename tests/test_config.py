@@ -105,3 +105,18 @@ def test_frozen_loads_config_next_to_exe(monkeypatch, tmp_path):
     settings = config.load_settings()  # без явного пути — поиск рядом с exe
     assert settings["hotkey"]["modifiers"] == 0x0002 | 0x0004  # Ctrl+Shift
     assert settings["hotkey"]["vk"] == 0x31
+
+def test_highlighting_bsl_keywords_string_and_array(tmp_path):
+    """[highlighting] bsl_keywords: строка или TOML-массив строк — оба варианта."""
+    cfg = tmp_path / "launcher.toml"
+    cfg.write_text("[highlighting]\nbsl_keywords = 'Тогда ИначеЕсли'\n", encoding="utf-8")
+    settings = config.load_settings(cfg)
+    assert settings["highlighting"]["bsl_keywords"].split() == ["Тогда", "ИначеЕсли"]
+
+    cfg.write_text("[highlighting]\nbsl_keywords = ['Процедура', 'Функция']\n", encoding="utf-8")
+    settings = config.load_settings(cfg)
+    assert settings["highlighting"]["bsl_keywords"].split() == ["Процедура", "Функция"]
+
+    cfg.write_text("[highlighting]\nbsl_keywords = ''\n", encoding="utf-8")
+    settings = config.load_settings(cfg)
+    assert "Тогда" in settings["highlighting"]["bsl_keywords"]  # пусто → дефолт

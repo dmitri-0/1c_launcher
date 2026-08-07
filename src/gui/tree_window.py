@@ -1,14 +1,16 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QTreeView, QVBoxLayout, QWidget,
-    QStatusBar,
+    QMainWindow, QTreeView, QVBoxLayout, QWidget, QStatusBar, QSplitter,
 )
 from PySide6.QtGui import QStandardItemModel, QAction
+from PySide6.QtCore import Qt
 import threading
 
 from gui.hotkeys import GlobalHotkeyManager
 from gui.actions import DatabaseActions, DatabaseOperations, ProcessActions
 from gui.tree import TreeBuilder, OpenedBasesTreeBuilder, MainProcessesTreeBuilder
 from gui.mixins import (
+    CatalogMixin,
+    NotesMixin,
     TrayMixin,
     ShortcutsMixin,
     IbasesEditorMixin,
@@ -25,6 +27,8 @@ from services.web_publisher import is_admin
 
 
 class TreeWindow(
+    CatalogMixin,
+    NotesMixin,
     TrayMixin,
     ShortcutsMixin,
     IbasesEditorMixin,
@@ -65,9 +69,25 @@ class TreeWindow(
         layout = QVBoxLayout()
         layout.addWidget(self.tree)
 
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+        # Панель заметок (справа): preview активной заметки / редактирование (F4)
+        from config import NOTES_ZOOM_DEFAULT
+        from notes.notes_panel import NotesPanel
+        self.notes_panel = NotesPanel(initial_zoom=int(NOTES_ZOOM_DEFAULT))
+        self.notes_panel.hide()
+
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.addWidget(self.tree)
+        self.splitter.addWidget(self.notes_panel)
+
+        # Доля панели заметок по ширине окна — из launcher.toml ([notes] panel_width_percent)
+        from config import NOTES_PANEL_WIDTH_PERCENT
+        percent = max(20, min(95, int(NOTES_PANEL_WIDTH_PERCENT)))
+        self.splitter.setStretchFactor(0, 100 - percent)
+        self.splitter.setStretchFactor(1, percent)
+        total = max(self.width(), 800)
+        self.splitter.setSizes([int(total * (100 - percent) / 100), int(total * percent / 100)])
+
+        self.setCentralWidget(self.splitter)
 
         # Данные
         self.all_bases = []
@@ -91,6 +111,14 @@ class TreeWindow(
         self.tree_builder = TreeBuilder(self.model)
         self.opened_bases_builder = OpenedBasesTreeBuilder(self.model)
         self.main_processes_builder = MainProcessesTreeBuilder(self.model)
+
+        # Заметки: менеджер + построитель узла «📝 Заметки» (до load_bases,
+        # т.к. load_bases пересобирает узлы заметок и каталога после очистки модели)
+        self.init_notes()
+
+        # Каталог файлов: узел «📂 Каталог» (после init_notes — важен порядок
+        # обработчиков выбора: заметки сохраняют файл каталога до переключения панели)
+        self.init_catalog()
 
         self.setup_menu()
         self.setup_digit_navigation()
@@ -141,7 +169,7 @@ class TreeWindow(
 
         a = QAction("Открыть конфигуратор\t[F4 / Shift+Enter]", self)
         a.setShortcuts(["F4", "Shift+Return"])
-        a.triggered.connect(self.handle_f4_open)
+        a.triggered.connect(self.handle_f4)
         menu_actions.addAction(a)
 
         a = QAction("Инструменты ИР\t[F5]", self)
@@ -285,6 +313,18 @@ class TreeWindow(
         a = QAction("Очистить кеш / Принудительно закрыть\t[Shift+Del]", self)
         a.setShortcut("Shift+Del")
         a.triggered.connect(self.handle_shift_delete)
+        menu_edit.addAction(a)
+
+        menu_edit.addSeparator()
+
+        a = QAction("Новая заметка\t[Ctrl+N]", self)
+        a.setShortcut("Ctrl+N")
+        a.triggered.connect(lambda: self.notes_mixin.new_note())
+        menu_edit.addAction(a)
+
+        a = QAction("Переименовать заметку\t[F2]", self)
+        a.setShortcut("F2")
+        a.triggered.connect(lambda: self.notes_mixin.rename_selected())
         menu_edit.addAction(a)
 
         # ── Вид ───────────────────────────────────────────────

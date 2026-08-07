@@ -1,6 +1,16 @@
 import sys
 import os
 
+# Консоль Windows (cp1251) не умеет эмодзи в print() — при запуске из консоли
+# (например, pyrun) иначе падаем UnicodeEncodeError ещё на импорте config.
+for _stream_name in ("stdout", "stderr"):
+    _stream = getattr(sys, _stream_name, None)
+    if _stream is not None:
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 from gui.tree_window import TreeWindow
