@@ -32,6 +32,10 @@ class Database1C:
     # Тип клиента: 'thin' (тонкий, 1cv8c.exe) или 'thick' (толстый, 1cv8.exe)
     client_type: Optional[str] = 'thick'  # По умолчанию толстый клиент
 
+    # Параметры публикации на веб-сервере Apache (F9)
+    publish_name: Optional[str] = None  # Псевдоним публикации (wsdir), например 'shop'
+    publish_dir: Optional[str] = None  # Каталог публикации, например r'c:\1CWEB\shop'
+
     def __str__(self):
         return self.name
 

@@ -15,7 +15,7 @@ class ShortcutsMixin:
         self.statusBar.showMessage(f"\\U0001f3a8 Тема переключена: {status}", 2000)
 
     def handle_enter(self):
-        """Обработка Enter: активация процесса или открытие базы."""
+        """Обработка Enter: активация процесса или чистый запуск базы (без отладки)."""
         process = self.process_actions.get_selected_process()
         if process:
             selected_index = self.tree.currentIndex()
@@ -30,7 +30,7 @@ class ShortcutsMixin:
         else:
             db = self.operations.get_selected_database(self.model, self.tree)
             if db:
-                open_success = self.actions.open_database(db)
+                open_success = self.actions.open_database(db, debug=False)
                 if open_success:
                     self.minimize_to_tray()
 
@@ -94,6 +94,18 @@ class ShortcutsMixin:
                 self.actions.update_cfg_from_repository_and_dump_cf(db)
             else:
                 self.actions.save_and_dump_cf(db)
+
+    def handle_f9_publish(self):
+        """Обработка F9: публикация выбранной базы на Apache (webinst.exe)."""
+        db = self.operations.get_selected_database(self.model, self.tree)
+        if db:
+            self.actions.publish_database(db)
+
+    def handle_shift_f9_unpublish(self):
+        """Обработка Shift+F9: отмена публикации выбранной базы."""
+        db = self.operations.get_selected_database(self.model, self.tree)
+        if db:
+            self.actions.unpublish_database(db)
 
     def handle_delete(self):
         """Обработка Del: закрытие процесса или удаление базы."""

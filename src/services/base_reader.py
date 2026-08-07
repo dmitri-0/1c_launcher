@@ -123,6 +123,8 @@ class BaseReader:
             pwd_storage=data.get('PwdStorage', None),
             storage_path=data.get('StoragePath', None),
             client_type=client_type,  # Тип клиента
+            publish_name=data.get('PublishName', None),
+            publish_dir=data.get('PublishDir', None),
         )
     
     def print_bases_list(self, bases: List[Database1C]):

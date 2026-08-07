@@ -3,8 +3,9 @@
 """
 import os
 import subprocess
+from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QTimer
-from services.process_manager import ProcessManager, Process1C
+from services.process_manager import ProcessManager, Process1C, WaitAborted
 from typing import Optional, Union
 
 
@@ -163,13 +164,41 @@ class ProcessActions:
         
         if not isinstance(process, Process1C):
             return
-        
+
+        # Защита от повторного входа: пока идёт ожидание закрытия, повторные
+        # вызовы (например, ещё одно Del через прокрутку событий) игнорируем.
+        if getattr(self.window, "_close_wait_active", False):
+            self._show_status("⏳ Уже выполняется ожидание закрытия…", 2000)
+            return
+
         action_name = "Снята задача" if force else "Закрыто"
         activate_success = ProcessManager.activate_window(process)
-        success = ProcessManager.close_process(process, force=force)
+
+        if force:
+            success = ProcessManager.close_process(process, force=True)
+        else:
+            # Корректное закрытие: ожидание может затянуться (1С спрашивает про
+            # несохранённые данные и т.п.). Во время ожидания прокручиваем очередь
+            # событий Qt, чтобы глобальная клавиша Alt+D была обработана и прервала
+            # ожидание (аварийный сброс) — пользователь передумал закрывать.
+            abort_event = self.window.begin_close_wait()
+            try:
+                success = ProcessManager.close_process(
+                    process,
+                    force=False,
+                    abort_event=abort_event,
+                    pump_events=lambda: QApplication.processEvents(),
+                )
+            except WaitAborted:
+                hm = getattr(self.window, "hotkey_manager", None)
+                key_name = hm.get_hotkey_name() if hm is not None and hasattr(hm, "get_hotkey_name") else "Alt+D"
+                self._show_status(f"⏹️ Ожидание закрытия отменено ({key_name})", 4000)
+                return
+            finally:
+                self.window.end_close_wait()
         
         if success:
-            self.window.statusBar.showMessage(f"✅ {action_name}: {process.name}", 3000)
+            self._show_status(f"✅ {action_name}: {process.name}", 3000)
             
             # Обновляем список процессов с задержкой и восстанавливаем позицию
             # Для force=True - 100мс, для корректного закрытия - 500мс (даём время на завершение)
@@ -185,4 +214,12 @@ class ProcessActions:
                     # Процесс 1С
                     QTimer.singleShot(delay, self.window.refresh_opened_bases)
         else:
-            self.window.statusBar.showMessage(f"❌ Не удалось закрыть: {process.name}", 3000)
+            self._show_status(f"❌ Не удалось закрыть: {process.name}", 3000)
+
+    def _show_status(self, message: str, timeout_ms: int = 3000):
+        """Показать сообщение в статус-баре, не падая, если окно уже уничтожено
+        (например, выход из приложения во время ожидания закрытия)."""
+        try:
+            self.window.statusBar.showMessage(message, timeout_ms)
+        except RuntimeError:
+            pass  # окно уничтожено — статус-бар уже недоступен

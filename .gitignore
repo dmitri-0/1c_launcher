@@ -29,6 +29,19 @@ ENV/
 env/
 .venv
 
+# Сборка PyInstaller (buildexe → dist/, buildexe_v2 → dist_v2/)
+build/
+dist/
+build_v2/
+dist_v2/
+
+# Reasonix / агентные артефакты сессий
+.reasonix/
+last_task_response.json
+
+# Резервные копии
+*.bak
+
 # IDE
 .vscode/
 .idea/

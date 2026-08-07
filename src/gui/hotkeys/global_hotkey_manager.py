@@ -6,12 +6,27 @@
 
 import platform
 
+from config import GLOBAL_HOTKEY_MODIFIERS, GLOBAL_HOTKEY_VK
+
 # Проверка доступности Windows API для глобальных горячих клавиш
 if platform.system() == 'Windows':
     try:
         import ctypes
         from ctypes import wintypes
         WINDOWS_HOTKEY_AVAILABLE = True
+
+        # Явные сигнатуры Windows API: HWND — pointer-size (64 бита), иначе
+        # ctypes конвертирует большой hwnd в c_int → OverflowError.
+        _USER32 = ctypes.windll.user32
+        _USER32.RegisterHotKey.argtypes = [
+            wintypes.HWND, ctypes.c_int, ctypes.c_uint, ctypes.c_uint
+        ]
+        _USER32.RegisterHotKey.restype = wintypes.BOOL
+        _USER32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+        _USER32.UnregisterHotKey.restype = wintypes.BOOL
+        _USER32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        _USER32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        _USER32.SetForegroundWindow.restype = wintypes.BOOL
     except ImportError:
         WINDOWS_HOTKEY_AVAILABLE = False
         print("⚠️ Предупреждение: ctypes/wintypes недоступны. Глобальные горячие клавиши будут отключены.")
@@ -21,37 +36,35 @@ else:
 
 class GlobalHotkeyManager:
     """Управление глобальными горячими клавишами Windows.
-    
+
+    Комбинация (модификаторы + VK) настраивается во внешнем файле
+    src/launcher.toml ([hotkey]) и читается динамически — без пересборки.
+
     Attributes:
         HOTKEY_ID: Уникальный идентификатор горячей клавиши
-        HOTKEY_MODIFIERS: Модификаторы (Alt)
-        HOTKEY_VK: Виртуальный код клавиши (тильда/ё)
+        HOTKEY_MODIFIERS: Модификаторы (из config)
+        HOTKEY_VK: Виртуальный код клавиши (из config)
     """
-    
-    # Константы для глобальной горячей клавиши
-    HOTKEY_ID = 1
-    # Ctrl (0x0002) | Alt (0x0001) | Shift (0x0004) = 0x0007
-    
-    # HOTKEY_MODIFIERS = 0x0001 | 0x0004
-    # HOTKEY_VK = 0xC0  # VK_OEM_3 (клавиша тильды/ё)
 
-    HOTKEY_MODIFIERS = 0x0001 # Alt
-    HOTKEY_VK = 0x44  # D
+    HOTKEY_ID = 1
 
     def __init__(self, window):
         """Инициализация менеджера.
-        
+
         Args:
             window: Объект QMainWindow для которого регистрируются горячие клавиши
         """
         self.window = window
         self.hotkey_registered = False
+        # Комбинация читается из launcher.toml — меняется без пересборки
+        self.HOTKEY_MODIFIERS = GLOBAL_HOTKEY_MODIFIERS
+        self.HOTKEY_VK = GLOBAL_HOTKEY_VK
     
     def register(self):
         """Регистрирует глобальную горячую клавишу для вызова окна.
-        
-        По умолчанию регистрируется Alt+Ё.
-        Комбинацию можно изменить через константы HOTKEY_MODIFIERS и HOTKEY_VK.
+
+        Комбинация настраивается в launcher.toml ([hotkey]) рядом с exe
+        и читается динамически — правка кода/пересборка не требуется.
         """
         if not WINDOWS_HOTKEY_AVAILABLE:
             return
@@ -69,7 +82,7 @@ class GlobalHotkeyManager:
             
             if result:
                 self.hotkey_registered = True
-                key_name = self._get_hotkey_name()
+                key_name = self.get_hotkey_name()
                 print(f"✅ Глобальная горячая клавиша {key_name} зарегистрирована")
                 self.window.statusBar.showMessage(f"✅ Горячая клавиша {key_name} активна", 3000)
             else:
@@ -127,10 +140,23 @@ class GlobalHotkeyManager:
     
     def activate_window(self):
         """Активирует и выводит окно на передний план.
-        
+
+        Если в данный момент идёт ожидание закрытия процесса (после Del), глобальная
+        клавиша работает как «аварийный сброс»: прерывает ожидание — пользователь
+        передумал закрывать 1С (запрос WM_CLOSE уже отправлен, но окно 1С может
+        остаться живым, и к нему можно вернуться).
+
         Использует метод show_from_tray() из TreeWindow, который корректно обрабатывает
         скрытое или свернутое состояние окна.
         """
+        # Аварийный сброс ожидания закрытия процесса (Del) — глобальная клавиша
+        if getattr(self.window, "_close_wait_active", False):
+            abort_event = getattr(self.window, "_close_wait_abort", None)
+            if abort_event is not None:
+                abort_event.set()
+            print("⏹️ Глобальная клавиша: ожидание закрытия прервано (аварийный сброс)")
+            return
+
         try:
             # Используем единый метод show_from_tray из TreeWindow
             self.window.show_from_tray()
@@ -150,8 +176,8 @@ class GlobalHotkeyManager:
         except Exception as e:
             print(f"❌ Ошибка активации окна: {e}")
     
-    def _get_hotkey_name(self):
-        """Возвращает читаемое название горячей клавиши."""
+    def get_hotkey_name(self):
+        """Возвращает читаемое название горячей клавиши (из config, динамически)."""
         modifiers = []
         if self.HOTKEY_MODIFIERS & 0x0008:
             modifiers.append("Win")
@@ -161,13 +187,16 @@ class GlobalHotkeyManager:
             modifiers.append("Ctrl")
         if self.HOTKEY_MODIFIERS & 0x0004:
             modifiers.append("Shift")
-        
-        # Определяем название клавиши по VK коду
-        key_names = {
-            0x31: "1", 0x32: "2", 0x33: "3", 0x34: "4", 0x35: "5",
-            0x36: "6", 0x37: "7", 0x38: "8", 0x39: "9", 0x30: "0",
-            0xC0: "`", 0x44: "D"  
-        }
+
+        # Читаемые имена для VK-кодов (любая клавиша из config получает имя)
+        key_names = {}
+        for i in range(10):
+            key_names[0x30 + i] = str(i)
+        for i in range(26):
+            key_names[0x41 + i] = chr(ord("A") + i)
+        for i in range(1, 13):
+            key_names[0x70 + i - 1] = f"F{i}"
+        key_names[0xC0] = "`"
         key = key_names.get(self.HOTKEY_VK, f"VK_{hex(self.HOTKEY_VK)}")
-        
+
         return "+".join(modifiers + [key])

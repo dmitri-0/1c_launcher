@@ -53,6 +53,10 @@ class BasesDataMixin:
                         f.write(f"UsrStorage={base.usr_storage}\n")
                     if base.pwd_storage:
                         f.write(f"PwdStorage={base.pwd_storage}\n")
+                    if base.publish_name:
+                        f.write(f"PublishName={base.publish_name}\n")
+                    if base.publish_dir:
+                        f.write(f"PublishDir={base.publish_dir}\n")
                     f.write("\n")
         except Exception as e:
             self.statusBar.showMessage(f"\u274c Ошибка сохранения: {e}")

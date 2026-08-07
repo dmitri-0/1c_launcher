@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
 )
 from PySide6.QtGui import QStandardItemModel, QAction
+import threading
 
 from gui.hotkeys import GlobalHotkeyManager
 from gui.actions import DatabaseActions, DatabaseOperations, ProcessActions
@@ -15,9 +16,12 @@ from gui.mixins import (
     TreeNavigationMixin,
     DbmMixin,
     DigitNavigationMixin,
+    ApacheManagerMixin,
+    SnapshotsUpdateMixin,
 )
 from models.database import Database1C
 from gui.dialogs import DatabaseSettingsDialog
+from services.web_publisher import is_admin
 
 
 class TreeWindow(
@@ -28,13 +32,16 @@ class TreeWindow(
     TreeNavigationMixin,
     DbmMixin,
     DigitNavigationMixin,
+    ApacheManagerMixin,
+    SnapshotsUpdateMixin,
     QMainWindow,
 ):
     """Основное окно с деревом баз 1С и управлением процессами."""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Базы 1С")
+        mode = " [администратор]" if is_admin() else ""
+        self.setWindowTitle(f"Базы 1С{mode}")
         self.resize(1100, 600)
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
@@ -69,6 +76,12 @@ class TreeWindow(
         self.last_activated_main_process = None
         self._ibases_editor_process = None
 
+        # Аварийный сброс ожидания закрытия процесса (глобальная клавиша Alt+D):
+        # _close_wait_active — идёт ли ожидание закрытия (Del),
+        # _close_wait_abort — сигнал «передумал закрывать», выходим из ожидания.
+        self._close_wait_active = False
+        self._close_wait_abort = threading.Event()
+
         # Инициализация
         self.setup_tray_icon()
         self.hotkey_manager = GlobalHotkeyManager(self)
@@ -86,6 +99,28 @@ class TreeWindow(
         self.refresh_opened_bases()
         self.refresh_main_processes()
         self.expand_and_select_initial()
+
+    def begin_close_wait(self) -> threading.Event:
+        """
+        Начать режим ожидания закрытия процесса (Del).
+
+        Пока режим активен, глобальная клавиша Alt+D не активирует окно,
+        а прерывает ожидание (аварийный сброс): устанавливает возвращаемый Event,
+        лаунчер снова становится отзывчивым. Сам процесс закрытия (WM_CLOSE)
+        к этому моменту уже запрошен — если 1С ещё не закрылась (например,
+        спрашивает про несохранённые данные), пользователь может вернуться к ней.
+
+        Returns:
+            Event: сигнал «передумал закрывать», который проверяет цикл ожидания
+        """
+        self._close_wait_abort.clear()
+        self._close_wait_active = True
+        return self._close_wait_abort
+
+    def end_close_wait(self):
+        """Завершить режим ожидания закрытия процесса (Del)."""
+        self._close_wait_abort.clear()
+        self._close_wait_active = False
 
     def setup_menu(self):
         """Создание меню бара с привязкой всех действий и горячих клавиш."""
@@ -121,8 +156,31 @@ class TreeWindow(
 
         menu_actions.addSeparator()
 
-        a = QAction("Запустить DBM API", self)
+        a = QAction("Запустить DBM API\t[F11]", self)
+        a.setShortcut("F11")
         a.triggered.connect(self.run_dbm_app)
+        menu_actions.addAction(a)
+
+        menu_actions.addSeparator()
+
+        a = QAction("Управление Apache…\t[Ctrl+F2]", self)
+        a.setShortcut("Ctrl+F2")
+        a.triggered.connect(self.open_apache_manager)
+        menu_actions.addAction(a)
+
+        a = QAction("Снапшоты: обновить копии…\t[Ctrl+U]", self)
+        a.setShortcut("Ctrl+U")
+        a.triggered.connect(self.open_snapshots_update)
+        menu_actions.addAction(a)
+
+        a = QAction("Создать снапшот DBM API…", self)
+        a.triggered.connect(self.open_create_snapshot)
+        menu_actions.addAction(a)
+
+        menu_actions.addSeparator()
+
+        a = QAction("Очистить «Недавние» от копий с датой…", self)
+        a.triggered.connect(self.operations.remove_dated_from_recent)
         menu_actions.addAction(a)
 
         menu_actions.addSeparator()
@@ -155,6 +213,18 @@ class TreeWindow(
         a.triggered.connect(self.handle_f8_dump_cf)
         menu_cfg.addAction(a)
 
+        menu_cfg.addSeparator()
+
+        a = QAction("Опубликовать базу\t[F9]", self)
+        a.setShortcut("F9")
+        a.triggered.connect(self.handle_f9_publish)
+        menu_cfg.addAction(a)
+
+        a = QAction("Отменить публикацию\t[Shift+F9]", self)
+        a.setShortcut("Shift+F9")
+        a.triggered.connect(self.handle_shift_f9_unpublish)
+        menu_cfg.addAction(a)
+
         # ── Редактирование ────────────────────────────────────
         menu_edit = menubar.addMenu("Редактирование")
 
@@ -170,6 +240,19 @@ class TreeWindow(
         a.setShortcut("Ctrl+D")
         a.triggered.connect(lambda: self.operations.duplicate_database(
             self.operations.get_selected_database(self.model, self.tree), Database1C
+        ))
+        menu_edit.addAction(a)
+
+        a = QAction("Обновить копию из снапшота…\t[F12]", self)
+        a.setShortcut("F12")
+        a.triggered.connect(lambda: self.operations.update_copy_from_snapshot(
+            self.operations.get_selected_database(self.model, self.tree), Database1C
+        ))
+        menu_edit.addAction(a)
+
+        a = QAction("Откатить к снапшоту (downgrade)…", self)
+        a.triggered.connect(lambda: self.operations.downgrade_to_snapshot(
+            self.operations.get_selected_database(self.model, self.tree)
         ))
         menu_edit.addAction(a)
 

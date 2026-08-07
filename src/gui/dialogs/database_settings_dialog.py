@@ -9,6 +9,8 @@ from PySide6.QtWidgets import (
     QHeaderView, QLabel
 )
 
+from services.web_publisher import WebPublisher, PublishError
+
 
 class DatabaseSettingsDialog(QDialog):
     """Диалог настроек базы данных"""
@@ -71,6 +73,24 @@ class DatabaseSettingsDialog(QDialog):
                 self.version_combo.setCurrentText(version_with_arch)
         
         form_layout.addRow("Версия:", self.version_combo)
+
+        # Публикация на Apache (F9)
+        self.publish_name_edit = QLineEdit()
+        self.publish_name_edit.setText(database.publish_name if database and database.publish_name else "")
+        self.publish_name_edit.setPlaceholderText("Псевдоним (wsdir), например: shop")
+        form_layout.addRow("Публикация (имя):", self.publish_name_edit)
+
+        self.publish_dir_edit = QLineEdit()
+        self.publish_dir_edit.setText(database.publish_dir if database and database.publish_dir else "")
+        self.publish_dir_edit.setPlaceholderText(r"Каталог публикации, например: c:\1CWEB\shop")
+        form_layout.addRow("Публикация (каталог):", self.publish_dir_edit)
+
+        self.publish_port_label = QLabel("—")
+        form_layout.addRow("Порт публикации:", self.publish_port_label)
+
+        # Порт зависит от версии платформы — обновляем при смене версии
+        self.version_combo.currentTextChanged.connect(self._update_publish_port)
+        self._update_publish_port(self.version_combo.currentText())
         
         # Тип клиента - выпадающий список
         self.client_type_combo = QComboBox()
@@ -182,23 +202,37 @@ class DatabaseSettingsDialog(QDialog):
         
         return versions
     
-    def get_settings(self):
-        """Возвращает настройки в виде словаря"""
-        # Извлекаем версию и разрядность из комбобокса
-        version_text = self.version_combo.currentText()
-        
-        # Парсим версию и разрядность
-        # Формат: "8.3.23.2040 (x86)" или "8.3.23.2040 (x64)"
+    def _parse_version_text(self, version_text):
+        """Разбирает "8.3.27.1688 (x86)" -> (version, app_arch)."""
         version = version_text
         app_arch = 'x86'  # по умолчанию
-        
-        # Ищем разрядность в скобках
         match = re.search(r'\(\s*(x86|x64)\s*\)\s*$', version_text)
         if match:
             arch_str = match.group(1)
             app_arch = 'x86_64' if arch_str == 'x64' else 'x86'
-            # Убираем разрядность из версии
             version = version_text[:match.start()].strip()
+        return version, app_arch
+
+    def _update_publish_port(self, version_text):
+        """Показывает инстанс Apache и порт, куда будет опубликована база."""
+        version, _ = self._parse_version_text(version_text)
+        if not version:
+            self.publish_port_label.setText("—")
+            return
+        try:
+            publisher = WebPublisher()
+            instance = publisher.select_instance(version)
+            self.publish_port_label.setText(
+                f"{instance.name} — порт {instance.port} ({instance.apache_root})"
+            )
+        except PublishError:
+            self.publish_port_label.setText("—")
+
+    def get_settings(self):
+        """Возвращает настройки в виде словаря"""
+        # Извлекаем версию и разрядность из комбобокса
+        version_text = self.version_combo.currentText()
+        version, app_arch = self._parse_version_text(version_text)
         
         # Получаем тип клиента
         client_type = self.client_type_combo.currentData()
@@ -212,6 +246,9 @@ class DatabaseSettingsDialog(QDialog):
             'app': self.app_edit.text() if self.app_edit.text() else None,
             'storage_path': self.storage_path_edit.text() if self.storage_path_edit.text() else None,
             'client_type': client_type,  # Добавляем тип клиента
+            # Параметры публикации (F9)
+            'publish_name': self.publish_name_edit.text() if self.publish_name_edit.text() else None,
+            'publish_dir': self.publish_dir_edit.text() if self.publish_dir_edit.text() else None,
             # Данные из таблицы
             'usr_enterprise': self.credentials_table.item(0, 0).text() or None,
             'pwd_enterprise': self.credentials_table.item(1, 0).text() or None,

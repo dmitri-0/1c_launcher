@@ -8,11 +8,14 @@
 """
 
 import uuid
+import re
 from datetime import datetime
 from pathlib import Path
 import shutil
 import os
-from PySide6.QtWidgets import QMessageBox, QApplication
+from PySide6.QtWidgets import QMessageBox, QApplication, QInputDialog
+
+from services.dbm_snapshots import _DATE_SUFFIX_RE
 
 class DatabaseOperations:
     def __init__(self, window, all_bases, save_callback, reload_callback):
@@ -63,40 +66,140 @@ class DatabaseOperations:
         except Exception as e:
             self.window.statusBar.showMessage(f"❌ Ошибка копирования: {e}")
 
+    def _create_date_copy(self, database, Database1C, connect_override=None):
+        """Создаёт свежую копию базы; исходную переименовывает с датой.
+
+        Возвращает новую копию (с исходным именем базы). Если передан
+        connect_override — копия получает новую строку подключения.
+        """
+        new_database = Database1C(
+            id=str(uuid.uuid4()),
+            name=database.name,
+            folder=database.folder,
+            connect=connect_override if connect_override else database.connect,
+            app=database.app,
+            version=database.version,
+            app_arch=database.app_arch,
+            order_in_tree=database.order_in_tree,
+            usr=database.usr,
+            pwd=database.pwd,
+            original_folder=database.original_folder,
+            is_recent=database.is_recent,
+            last_run_time=database.last_run_time,
+            usr_enterprise=database.usr_enterprise,
+            pwd_enterprise=database.pwd_enterprise,
+            usr_configurator=database.usr_configurator,
+            pwd_configurator=database.pwd_configurator,
+            usr_storage=database.usr_storage,
+            pwd_storage=database.pwd_storage,
+            storage_path=database.storage_path,
+            client_type=database.client_type,
+            publish_name=database.publish_name,
+            publish_dir=database.publish_dir,
+        )
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        database.name = f"{database.name} {current_date}"
+        index = self.all_bases.index(database)
+        self.all_bases.insert(index + 1, new_database)
+        return new_database
+
     def duplicate_database(self, database, Database1C):
         try:
-            new_database = Database1C(
-                id=str(uuid.uuid4()),
-                name=database.name,
-                folder=database.folder,
-                connect=database.connect,
-                app=database.app,
-                version=database.version,
-                app_arch=database.app_arch,
-                order_in_tree=database.order_in_tree,
-                usr=database.usr,
-                pwd=database.pwd,
-                original_folder=database.original_folder,
-                is_recent=database.is_recent,
-                last_run_time=None,
-                usr_enterprise=database.usr_enterprise,
-                pwd_enterprise=database.pwd_enterprise,
-                usr_configurator=database.usr_configurator,
-                pwd_configurator=database.pwd_configurator,
-                usr_storage=database.usr_storage,
-                pwd_storage=database.pwd_storage,
-                storage_path=database.storage_path,
-                client_type=database.client_type,
-            )
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            database.name = f"{database.name} {current_date}"
-            index = self.all_bases.index(database)
-            self.all_bases.insert(index + 1, new_database)
+            self._create_date_copy(database, Database1C)
             self.save_callback()
             self.reload_callback()
             self.window.statusBar.showMessage(f"✅ База скопирована. Исходная база переименована в '{database.name}'")
         except Exception as e:
             self.window.statusBar.showMessage(f"❌ Ошибка копирования базы: {e}")
+
+    def create_copy_with_connect(self, database, Database1C, new_connect):
+        """Создаёт копию базы с датой и подставляет новую строку подключения.
+
+        Исходную базу переименовывает в «<имя> <дата>», создаёт свежую копию
+        под исходным именем с новой строкой подключения. Без диалогов.
+        """
+        new_database = self._create_date_copy(database, Database1C, connect_override=new_connect)
+        self.save_callback()
+        self.reload_callback()
+        return new_database
+
+    def update_copy_from_snapshot(self, database, Database1C):
+        """Автоматизация «обновления копии из снапшота» (F12).
+
+        Запрашивает у пользователя только новую строку подключения (снапшот),
+        дальше сама: переименовывает текущую базу в «<имя> <дата>» (копия
+        остаётся), создаёт свежую копию под исходным именем и подставляет в
+        неё новую строку подключения.
+        """
+        try:
+            new_connect, ok = QInputDialog.getText(
+                self.window,
+                "Обновить копию из снапшота",
+                f"Новая строка подключения (снапшот) для базы '{database.name}':\n"
+                "Пример: Srvr=\"srv-1c-8325:1541\";Ref=\"blank_database_0804_Pechericadv_3\";",
+                text=database.connect,
+            )
+            if not ok or not new_connect.strip():
+                self.window.statusBar.showMessage("Обновление копии из снапшота отменено")
+                return
+
+            new_database = self.create_copy_with_connect(database, Database1C, new_connect.strip())
+            self.window.statusBar.showMessage(
+                f"✅ Создана копия '{new_database.name}' со строкой подключения: {new_connect.strip()}"
+            )
+        except Exception as e:
+            self.window.statusBar.showMessage(f"❌ Ошибка обновления копии: {e}")
+
+    def downgrade_to_snapshot(self, database):
+        """Откат копии к предыдущему снапшоту (обратное действие F12).
+
+        Для базы «<имя> <дата1> <дата2>»:
+        - находит базу «<имя> <дата1>» (на один уровень вверх по каскаду имён);
+        - записывает в неё строку подключения текущей базы;
+        - удаляет текущую базу из списка.
+        Если база не найдена (или в имени нет даты) — сообщает и ничего не делает.
+        """
+        name = getattr(database, "name", "") or ""
+        match = _DATE_SUFFIX_RE.search(name)
+        if not match:
+            self.window.statusBar.showMessage(
+                f"⚠ В имени базы '{name}' нет даты — откат невозможен"
+            )
+            return
+        base_name = name[:match.start()].rstrip()
+        if not base_name:
+            self.window.statusBar.showMessage(
+                f"⚠ Не удалось определить имя базы для отката ('{name}')"
+            )
+            return
+        target = next(
+            (db for db in self.all_bases
+             if db is not database and db.name == base_name),
+            None,
+        )
+        if target is None:
+            self.window.statusBar.showMessage(
+                f"⚠ База '{base_name}' не найдена — откат не выполнен"
+            )
+            return
+        reply = QMessageBox.question(
+            self.window,
+            "Откат к снапшоту",
+            f"Откатить '{name}' к '{base_name}'?\n\n"
+            f"Строка подключения '{base_name}' будет заменена на:\n{database.connect}\n\n"
+            f"Копия '{name}' будет удалена из списка.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        target.connect = database.connect
+        self.all_bases.remove(database)
+        self.save_callback()
+        self.reload_callback()
+        self.window.statusBar.showMessage(
+            f"✅ '{base_name}' откачена к снапшоту, '{name}' удалена"
+        )
 
     def edit_database_settings(self, database, DatabaseSettingsDialog):
         dialog = DatabaseSettingsDialog(self.window, database)
@@ -118,6 +221,8 @@ class DatabaseOperations:
             database.usr_storage = settings['usr_storage']
             database.pwd_storage = settings['pwd_storage']
             database.client_type = settings['client_type']
+            database.publish_name = settings.get('publish_name')
+            database.publish_dir = settings.get('publish_dir')
             self.save_callback()
             self.reload_callback()
             self.window.statusBar.showMessage(f"✅ Настройки базы {database.name} сохранены")
@@ -160,6 +265,42 @@ class DatabaseOperations:
                     result_message
                 )
                 self.window.statusBar.showMessage(f"✅ База '{database.name}' удалена")
+
+    def remove_dated_from_recent(self):
+        """Убирает из «Недавних» все копии с датой в имени (одним действием).
+
+        Не удаляет базы полностью — только снимает пометку «недавняя»,
+        возвращает в исходную папку (как Del на базе из «Недавних»).
+        """
+        dated = [
+            db for db in self.all_bases
+            if getattr(db, "is_recent", False)
+            and _DATE_SUFFIX_RE.search(getattr(db, "name", "") or "")
+        ]
+        if not dated:
+            self.window.statusBar.showMessage("В «Недавних» нет копий с датой в имени")
+            return
+        names = "\n".join(f"• {db.name}" for db in dated[:15])
+        if len(dated) > 15:
+            names += f"\n… и ещё {len(dated) - 15}"
+        reply = QMessageBox.question(
+            self.window,
+            "Очистить «Недавние»",
+            f"Убрать из «Недавних» {len(dated)} копий с датой в имени?\n\n{names}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        for db in dated:
+            db.is_recent = False
+            if db.original_folder:
+                db.folder = db.original_folder
+                db.original_folder = None
+            db.last_run_time = None
+        self.save_callback()
+        self.reload_callback()
+        self.window.statusBar.showMessage(f"✅ Из «Недавних» убрано {len(dated)} копий с датой")
 
     def clear_cache(self, database):
         reply = QMessageBox.question(
@@ -224,6 +365,8 @@ class DatabaseOperations:
             new_database.usr_storage = settings['usr_storage']
             new_database.pwd_storage = settings['pwd_storage']
             new_database.client_type = settings['client_type']
+            new_database.publish_name = settings.get('publish_name')
+            new_database.publish_dir = settings.get('publish_dir')
             self.all_bases.append(new_database)
             self.save_callback()
             self.reload_callback()

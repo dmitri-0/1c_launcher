@@ -18,6 +18,7 @@ from ..mixins.db_launch_mixin import DbLaunchMixin
 from ..mixins.db_server_console_mixin import DbServerConsoleMixin
 from ..mixins.db_designer_mixin import DbDesignerMixin
 from ..mixins.db_recent_mixin import DbRecentMixin
+from ..mixins.db_publish_mixin import DbPublishMixin
 
 
 class DatabaseActions(
@@ -25,6 +26,7 @@ class DatabaseActions(
     DbServerConsoleMixin,
     DbDesignerMixin,
     DbRecentMixin,
+    DbPublishMixin,
 ):
     """Класс для работы с действиями над базами данных 1С.
 

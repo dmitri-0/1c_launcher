@@ -1,0 +1,86 @@
+# ==============================================================
+#  Настройки лаунчера 1С
+#
+#  Файл лежит РЯДОМ С exe (в сборке: dist\launcher.toml,
+#  в исходниках: src\launcher.toml) и читается динамически
+#  при каждом запуске — правка настроек НЕ требует пересборки.
+#
+#  Удалите/переименуйте файл — будут использованы встроенные
+#  значения по умолчанию (те же, что описаны в src/config.py).
+# ==============================================================
+
+[base]
+# Файл списка баз 1С. Если ключ не задан — путь берётся из %USERPROFILE%.
+# ibases_path = 'C:\Users\<user>\AppData\Roaming\1C\1CEStart\ibases.v8i'
+
+# Кодировка файла ibases.v8i
+encoding = 'utf-8-sig'
+
+# Путь к обработке инструментов ИР (F5)
+ir_tools_path = 'c:\ROOT\CodeBase\1C\Tools\ИР_Портативный\ирПортативный.epf'
+
+# Куда выгружать CF (F8) и писать логи операций (F7 и т.п.)
+cf_dump_path = 'D:\CF'
+log_path = 'D:\CF\Logs'
+
+# Запуск DBM API (F11)
+dbm_python_exe = 'c:\ROOT\CodeBase\Py\dbm_api\venv\Scripts\python.exe'
+dbm_script_path = 'c:\ROOT\CodeBase\Py\dbm_api\app.py'
+dbm_api_dir = 'c:\ROOT\CodeBase\Py\dbm_api'
+
+[hotkey]
+# Глобальная горячая клавиша вызова окна из любого места,
+# а также аварийного сброса ожидания закрытия (после Del).
+#
+# modifiers — модификаторы через '+' (латиницей, регистр не важен):
+#   'Alt', 'Ctrl', 'Shift', 'Win'  (например 'Alt+Shift')
+# либо число: MOD_ALT=1, MOD_CONTROL=2, MOD_SHIFT=4, MOD_WIN=8
+#   (несколько — сложением: Alt+Ctrl+Shift = 7)
+modifiers = 'Alt'
+
+# vk — виртуальный код клавиши:
+#   0x44 = D, 0x43 = C, 0x31 = 1, 0x70 = F1, 0x71 = F2 и т.д.
+vk = 0x44
+
+# Отслеживаемые приложения для узла «Основное» (меняется без пересборки)
+[[tracked_applications]]
+process_name = 'reasonix-desktop.exe'
+display_name = 'Rx'
+icon = '❯_'
+launch_path = 'c:\ROOT\Reasonix-windows-amd64\Reasonix.exe'
+
+[[tracked_applications]]
+process_name = 'WindowsTerminal.exe'
+display_name = 'Terminal'
+icon = '❯_'
+launch_path = 'wt.exe'
+
+[[tracked_applications]]
+process_name = 'TOTALCMD64.EXE'
+display_name = 'Total Commander'
+icon = '💾'
+launch_path = 'c:\ROOT\TCPU75\TOTALCMD64.EXE'
+
+[[tracked_applications]]
+process_name = 'Code.exe'
+display_name = 'VS Code'
+icon = '🔷'
+launch_path = 'C:\Users\{username}\AppData\Local\Programs\Microsoft VS Code\Code.exe'
+
+[[tracked_applications]]
+process_name = 'msedge.exe'
+display_name = 'MS Edge'
+icon = ' '
+launch_path = 'c:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+
+[[tracked_applications]]
+process_name = 'Telegram.exe'
+display_name = 'Telegram'
+icon = ' '
+launch_path = 'c:\Users\{username}\AppData\Roaming\Telegram Desktop\Telegram.exe'
+
+[[tracked_applications]]
+process_name = 'thunderbird.exe'
+display_name = 'Thunderbird'
+icon = ' '
+launch_path = 'c:\Program Files\Mozilla Thunderbird\thunderbird.exe'

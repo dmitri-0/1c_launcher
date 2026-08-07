@@ -13,14 +13,20 @@ from config import IR_TOOLS_PATH
 class DbLaunchMixin:
     """Запуск 1С-процессов: предприятие, конфигуратор, ИР-инструменты."""
 
-    def open_database(self, database):
-        """Открывает базу в режиме предприятия."""
+    def open_database(self, database, debug=True):
+        """Открывает базу в режиме предприятия.
+
+        Args:
+            database: База для запуска.
+            debug: Признак запуска с попыткой подключения к отладке
+                   (/Debug -attach). По умолчанию True (F3).
+        """
         executable = self._get_1c_executable(database)
         if not executable:
             self.window.statusBar.showMessage("❌ Не удалось найти исполняемый файл 1C")
             return False
 
-        if self._launch_1c_process(executable, "ENTERPRISE", database):
+        if self._launch_1c_process(executable, "ENTERPRISE", database, debug=debug):
             self._move_to_recent(database)
             self._delayed_reload_after_launch()
             return True
@@ -116,8 +122,15 @@ class DbLaunchMixin:
             print(f"Ошибка парсинга строки подключения: {e}")
             return connect_string
 
-    def _build_launch_command(self, executable, mode, database):
-        """Формирует командную строку для запуска 1С."""
+    def _build_launch_command(self, executable, mode, database, debug=True):
+        """Формирует командную строку для запуска 1С.
+
+        Args:
+            executable: Путь к исполняемому файлу 1С.
+            mode: Режим запуска (ENTERPRISE / DESIGNER / IR_TOOLS).
+            database: База для запуска.
+            debug: Признак добавления ключей /Debug -attach (только для ENTERPRISE).
+        """
         try:
             params = [mode if mode != 'IR_TOOLS' else 'ENTERPRISE']
 
@@ -169,7 +182,7 @@ class DbLaunchMixin:
                     '/WA-',
                 ])
 
-            if mode == 'ENTERPRISE':
+            if mode == 'ENTERPRISE' and debug:
                 params.extend([
                     '/Debug -attach',
                     '/DebuggerURL tcp://localhost'
@@ -186,10 +199,17 @@ class DbLaunchMixin:
             print(f"Ошибка формирования командной строки: {e}")
             return None
 
-    def _launch_1c_process(self, executable, mode, database):
-        """Запускает процесс 1С через временный BAT-файл."""
+    def _launch_1c_process(self, executable, mode, database, debug=True):
+        """Запускает процесс 1С через временный BAT-файл.
+
+        Args:
+            executable: Путь к исполняемому файлу 1С.
+            mode: Режим запуска (ENTERPRISE / DESIGNER / IR_TOOLS).
+            database: База для запуска.
+            debug: Признак запуска с подключением к отладке.
+        """
         try:
-            cmd_line = self._build_launch_command(executable, mode, database)
+            cmd_line = self._build_launch_command(executable, mode, database, debug=debug)
 
             if not cmd_line:
                 return False

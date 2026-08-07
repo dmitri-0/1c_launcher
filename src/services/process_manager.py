@@ -35,6 +35,15 @@ class Process1C:
         return hash(self.pid)
 
 
+class WaitAborted(Exception):
+    """
+    Ожидание закрытия процесса прервано пользователем (аварийный сброс глобальной клавишей).
+
+    Поднимается из ProcessManager.close_process, когда пользователь передумал
+    закрывать 1С и нажал глобальную комбинацию (Alt+D) во время ожидания.
+    """
+
+
 class ProcessManager:
     """
     Менеджер для работы с процессами 1cv8.exe, 1cv8c.exe и основными процессами
@@ -114,7 +123,7 @@ class ProcessManager:
         for pid, process_name in process_pids:
             window_info = ProcessManager._find_main_window(pid)
             if window_info:
-                hwnd, title = window_info
+                hwnd, _ = window_info
                 
                 # Получаем конфигурацию приложения
                 app_config = app_configs.get(process_name)
@@ -124,11 +133,9 @@ class ProcessManager:
                 icon = app_config.get("icon", "💻")
                 app_name = app_config.get("display_name", process_name)
                 
-                # Если заголовка нет - отображаем только имя приложения
-                if title:
-                    display_name = f"{icon} {title}"
-                else:
-                    display_name = f"{icon} {app_name}"
+                # Всегда отображаем имя приложения из конфигурации,
+                # а не заголовок окна (например, "Rx" вместо "Reasonix")
+                display_name = f"{icon} {app_name}"
 
                 processes.append(Process1C(pid=pid, name=display_name, hwnd=hwnd))
         
@@ -193,16 +200,26 @@ class ProcessManager:
             return False
     
     @staticmethod
-    def close_process(process: Process1C, force: bool = False) -> bool:
+    def close_process(process: Process1C, force: bool = False,
+                      abort_event=None, pump_events=None) -> bool:
         """
         Закрыть процесс
         
         Args:
             process: Процесс для закрытия
             force: Если True - принудительное завершение, иначе - корректное закрытие
+            abort_event: threading.Event — если установлен во время ожидания закрытия,
+                         ожидание прерывается (поднимается WaitAborted). Аварийный сброс
+                         глобальной клавишей (Alt+D), когда пользователь передумал закрывать.
+            pump_events: Callable — вызывается каждый цикл ожидания (например,
+                         QApplication.processEvents), чтобы глобальная клавиша (WM_HOTKEY)
+                         была доставлена в Qt-цикл и могла установить abort_event.
             
         Returns:
             True если успешно, False в противном случае
+
+        Raises:
+            WaitAborted: если ожидание закрытия прервано пользователем (глобальная клавиша)
         """
         try:
             proc = psutil.Process(process.pid)
@@ -219,6 +236,15 @@ class ProcessManager:
                     # Это позволяет вернуть управление сразу, как только окно закрылось,
                     # даже если процесс 1С еще висит в фоне.
                     while win32gui.IsWindow(process.hwnd):
+                        # Аварийный сброс: пользователь передумал закрывать — выходим
+                        if abort_event is not None and abort_event.is_set():
+                            raise WaitAborted()
+
+                        # Прокручиваем очередь событий, чтобы глобальная клавиша
+                        # (WM_HOTKEY) была обработана и установила abort_event
+                        if pump_events is not None:
+                            pump_events()
+
                         time.sleep(0.1)
                         # Защита от зависания: если процесс умер, прерываем цикл
                         if not psutil.pid_exists(process.pid):
@@ -228,6 +254,9 @@ class ProcessManager:
                     proc.terminate()
             
             return True
+        except WaitAborted:
+            # Ожидание прервано пользователем — пробрасываем наверх, вызывающий покажет сообщение
+            raise
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             # Если процесса уже нет, считаем успешным закрытием
             return True

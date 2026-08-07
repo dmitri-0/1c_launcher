@@ -11,6 +11,16 @@ class HelpDialog(QDialog):
         self.setWindowTitle("Справка по горячим клавишам")
         self.setMinimumWidth(800)
         self.setMinimumHeight(650)
+
+        # Имя глобальной горячей клавиши — читается динамически из hotkey_manager
+        # (значения берутся из src/launcher.toml), чтобы справка всегда показывала
+        # реально зарегистрированную комбинацию.
+        hotkey_name = "Alt+D"
+        parent_window = self.parent()
+        if parent_window is not None:
+            hm = getattr(parent_window, "hotkey_manager", None)
+            if hm is not None and hasattr(hm, "get_hotkey_name"):
+                hotkey_name = hm.get_hotkey_name()
         
         layout = QVBoxLayout()
         layout.setSpacing(0)
@@ -101,7 +111,7 @@ class HelpDialog(QDialog):
 
         # HTML Контент
         # ВАЖНО: width="100%" в теге table обязателен для Qt RichText
-        content = r"""
+        content = fr"""
         <div style="padding: 10px;">
             <h2 align="center">🎹 Горячие клавиши</h2>
             <hr>
@@ -118,7 +128,7 @@ class HelpDialog(QDialog):
                 </tr>
                 <tr>
                     <td><span class="key">Enter</span></td>
-                    <td><b>Предприятие:</b> Открыть базу или активировать процесс</td>
+                    <td><b>Предприятие (чистый запуск):</b> Открыть базу <b>без отладки</b> или активировать процесс</td>
                 </tr>
                 <tr>
                     <td><span class="key">F3</span></td>
@@ -137,7 +147,7 @@ class HelpDialog(QDialog):
                     <td><b>Консоль сервера:</b> Открыть для версии платформы</td>
                 </tr>
             </table>
-            
+
             <h3>🛠️ Конфигурация</h3>
             <table width="100%" cellspacing="0" cellpadding="4">
                 <tr>
@@ -157,7 +167,55 @@ class HelpDialog(QDialog):
                     <td>Выгрузить CF файл <span class="cmd">(/DumpCfg)</span></td>
                 </tr>
             </table>
-            
+
+            <h3>🌐 Публикация на Apache</h3>
+            <table width="100%" cellspacing="0" cellpadding="4">
+                <tr>
+                    <th width="25%">Клавиша</th>
+                    <th width="75%">Действие</th>
+                </tr>
+                <tr>
+                    <td><span class="key">F9</span></td>
+                    <td>📡 Опубликовать базу на Apache (<span class="cmd">webinst.exe</span>). Псевдоним и каталог берутся из настроек базы (<span class="key">Ctrl+E</span> → «Публикация»). Apache и каталог копируются/создаются автоматически, служба поднимается при необходимости</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Shift+F9</span></td>
+                    <td>🚫 Отменить публикацию базы</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Ctrl+F2</span></td>
+                    <td>🖥 <b>Управление Apache:</b> список экземпляров, запуск/остановка, службы, публикации, справка (<span class="key">F1</span> внутри окна)</td>
+                </tr>
+            </table>
+
+            <h3>📸 Снапшоты DBM API</h3>
+            <table width="100%" cellspacing="0" cellpadding="4">
+                <tr>
+                    <th width="25%">Клавиша</th>
+                    <th width="75%">Действие</th>
+                </tr>
+                <tr>
+                    <td><span class="key">Ctrl+U</span></td>
+                    <td>🔄 <b>Обновить копии:</b> полный список баз из «Мои снапшоты» + кнопка «Обновить копию» (получить новый снапшот через DBM API → connection string → F12). Чекбокс скрывает копии с датой</td>
+                </tr>
+                <tr>
+                    <td><span class="key">F11</span></td>
+                    <td>🚀 Запустить DBM API (там же «Мои снапшоты» с голубой подсветкой устаревших)</td>
+                </tr>
+                <tr>
+                    <td><span class="key">F12</span></td>
+                    <td>📸 Обновить копию из снапшота (новая строка подключения)</td>
+                </tr>
+                <tr>
+                    <td><i>меню «Редактирование»</i></td>
+                    <td>⬇ <b>«Откатить к снапшоту (downgrade)…»</b> — обратное F12: для «&lt;имя&gt; &lt;дата1&gt; &lt;дата2&gt;» переносит строку подключения в «&lt;имя&gt; &lt;дата1&gt;» и удаляет копию. Если база не найдена — сообщает и ничего не делает</td>
+                </tr>
+                <tr>
+                    <td><i>меню «Действия»</i></td>
+                    <td><b>«Создать снапшот DBM API…»</b> — мастер: БД → снапшот-мастер → ERP-сервер → описание (создание только через DBM API)</td>
+                </tr>
+            </table>
+
             <h3>🗄️ Список баз</h3>
             <table width="100%" cellspacing="0" cellpadding="4">
                 <tr>
@@ -170,7 +228,7 @@ class HelpDialog(QDialog):
                 </tr>
                 <tr>
                     <td><span class="key">Ctrl+E</span></td>
-                    <td>Редактировать параметры</td>
+                    <td>Редактировать параметры базы (включая поля «Публикация»: имя и каталог)</td>
                 </tr>
                  <tr>
                     <td><span class="key">Ctrl+I</span></td>
@@ -183,6 +241,10 @@ class HelpDialog(QDialog):
                 <tr>
                     <td><span class="key">Ctrl+C</span></td>
                     <td>Копировать строку подключения</td>
+                </tr>
+                <tr>
+                    <td><i>меню «Действия»</i></td>
+                    <td>🗑 <b>«Очистить „Недавние“ от копий с датой…»</b> — убрать из «Недавних» все копии с датой в имени (вместо Del по каждой)</td>
                 </tr>
                 <tr>
                     <td><span class="key">Del</span></td>
@@ -198,17 +260,17 @@ class HelpDialog(QDialog):
                         • <b>Процессы:</b> Принудительно убить процесс
                     </td>
                 </tr>
-                <tr>
-                    <td><span class="key">F10</span></td>
-                    <td>🌓 Сменить тему</td>
-                </tr>
             </table>
-            
+
             <h3>🖥️ Окно</h3>
             <table width="100%" cellspacing="0" cellpadding="4">
                 <tr>
                     <th width="25%">Клавиша</th>
                     <th width="75%">Действие</th>
+                </tr>
+                <tr>
+                    <td><span class="key">F10</span></td>
+                    <td>🌓 Переключить тему оформления (Светлая / Тёмная)</td>
                 </tr>
                 <tr>
                     <td><span class="key">Esc</span></td>
@@ -219,21 +281,20 @@ class HelpDialog(QDialog):
                     <td>Полный выход</td>
                 </tr>
                 <tr>
-                    <td><span class="key">Ctrl+Shift+Ё</span></td>
-                    <td>📢 <b>Global Hotkey:</b> Вызвать из любого места</td>
-                </tr>
-                <tr>
-                    <td><span class="key">F10</span></td>
-                    <td>🌓 Переключить тему оформления (Светлая / Тёмная)</td>
+                    <td><span class="key">{hotkey_name}</span></td>
+                    <td>📢 <b>Global Hotkey:</b> Вызвать окно из любого места · ⏹️ Отменить затянувшееся ожидание закрытия (после <span class="key">Del</span>)</td>
                 </tr>
             </table>
-            
+
             <br>
             <div class="note">
                 <b>💡 Полезно знать:</b><br><br>
                 1. <b>Кэш (Shift+Del):</b> Чистит папки <i>AppData\Local\1C\1cv8\</i> и <i>AppData\Roaming\1C\1Cv82\</i><br>
                 2. <b>Копия (Ctrl+D):</b> Создает клон записи в списке с уникальным ID. Безопасно для экспериментов.<br>
-                3. <b>Процессы:</b> В папке "Открытые базы" клавиша <span class="key">Del</span> работает как завершение задачи.
+                3. <b>Процессы:</b> В папке "Открытые базы" клавиша <span class="key">Del</span> работает как завершение задачи.<br>
+                4. <b>Публикация (F9):</b> один Apache на версию платформы; разрядность Apache должна совпадать с разрядностью платформы (wsap24.dll). Если для версии нет Apache — он копируется автоматически.<br>
+                5. <b>Снапшоты (Ctrl+U):</b> «Обновить копию» создаёт новый снапшот только через DBM API (номер вида <i>…_2</i> присваивается независимо от сервера), ждёт завершения задачи (живой лог, прогресс) и выполняет F12 автоматически.<br>
+                6. <b>DBM API:</b> токен запрашивается раз в час; если DBM API не запущен (F11) — интеграция недоступна.
             </div>
         </div>
         """
