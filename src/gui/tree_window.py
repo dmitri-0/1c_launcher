@@ -9,6 +9,8 @@ from gui.hotkeys import GlobalHotkeyManager
 from gui.actions import DatabaseActions, DatabaseOperations, ProcessActions
 from gui.tree import TreeBuilder, OpenedBasesTreeBuilder, MainProcessesTreeBuilder
 from gui.mixins import (
+    CatalogMixin,
+    NotesMixin,
     TrayMixin,
     ShortcutsMixin,
     IbasesEditorMixin,
@@ -18,7 +20,6 @@ from gui.mixins import (
     DigitNavigationMixin,
     ApacheManagerMixin,
     SnapshotsUpdateMixin,
-    NotesMixin,
 )
 from models.database import Database1C
 from gui.dialogs import DatabaseSettingsDialog
@@ -26,6 +27,7 @@ from services.web_publisher import is_admin
 
 
 class TreeWindow(
+    CatalogMixin,
     NotesMixin,
     TrayMixin,
     ShortcutsMixin,
@@ -110,8 +112,12 @@ class TreeWindow(
         self.main_processes_builder = MainProcessesTreeBuilder(self.model)
 
         # Заметки: менеджер + построитель узла «📝 Заметки» (до load_bases,
-        # т.к. load_bases пересобирает узел заметок после очистки модели)
+        # т.к. load_bases пересобирает узлы заметок и каталога после очистки модели)
         self.init_notes()
+
+        # Каталог файлов: узел «📂 Каталог» (после init_notes — важен порядок
+        # обработчиков выбора: заметки сохраняют файл каталога до переключения панели)
+        self.init_catalog()
 
         self.setup_menu()
         self.setup_digit_navigation()

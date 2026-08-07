@@ -47,6 +47,10 @@ def _default_settings() -> dict:
             "path": "",  # пусто = notes.db рядом с exe
             "panel_width_percent": 80,  # доля ширины окна для панели заметок
         },
+        "catalog": {
+            "path": "",  # пусто = узел «📂 Каталог» скрыт
+            "mask": "",  # пусто = все файлы; иначе список расширений ".md,.json"
+        },
         # Отслеживаемые приложения для узла "Основное"
         "tracked_applications": [
             {
@@ -191,6 +195,13 @@ def _merge(settings: dict, data: dict) -> None:
             except (TypeError, ValueError):
                 pass  # некорректное значение — оставляем дефолт
 
+    catalog = data.get("catalog")
+    if isinstance(catalog, dict):
+        if "path" in catalog:
+            settings["catalog"]["path"] = str(catalog["path"])
+        if "mask" in catalog:
+            settings["catalog"]["mask"] = str(catalog["mask"])
+
     apps = data.get("tracked_applications")
     if isinstance(apps, list) and apps:
         normalized = []
@@ -272,6 +283,11 @@ NOTES_PATH = _SETTINGS["notes"].get("path", "")
 
 # Доля ширины окна для панели заметок (в процентах, 20–95).
 NOTES_PANEL_WIDTH_PERCENT = _SETTINGS["notes"].get("panel_width_percent", 80)
+
+# Каталог файлов (узел «📂 Каталог»): корень и маска расширений.
+# Пустой path — узел скрыт.
+CATALOG_PATH = _SETTINGS["catalog"].get("path", "")
+CATALOG_MASK = _SETTINGS["catalog"].get("mask", "")
 
 # Отслеживаемые приложения для узла "Основное"
 TRACKED_APPLICATIONS = _SETTINGS["tracked_applications"]

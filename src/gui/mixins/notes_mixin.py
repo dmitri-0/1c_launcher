@@ -163,15 +163,30 @@ class NotesMixin:
 
     def _on_notes_selection_changed(self, current: QModelIndex, previous: QModelIndex):
         self._save_current_note()
+        # Каталог файлов может держать панель в режиме правки — сохраняем его файл
+        # ДО того, как панель переключится на заметку.
+        save_file = getattr(self, "_save_active_file", None)
+        if save_file is not None:
+            save_file()
         note = self._note_from_index(current)
         if note is not None and not note.is_folder:
             self._active_note_id = note.id
             self.notes_panel.show_note(note)
             self._show_notes_panel()
         else:
-            # папка/корень/не-заметки — панель скрываем
+            # папка/корень/не-заметки — панель скрываем, если её не занял каталог
             self._active_note_id = None
-            self.notes_panel.hide()
+            if not self._catalog_wants_panel():
+                self.notes_panel.hide()
+
+    def _notes_wants_panel(self) -> bool:
+        """True, если активна заметка (панель показывает заметку, не каталог)."""
+        return self._active_note_id is not None
+
+    def _catalog_wants_panel(self) -> bool:
+        """True, если текущая выборка — файл каталога (панель покажет CatalogMixin)."""
+        take = getattr(self, "_catalog_take_panel", None)
+        return bool(take and take())
 
     def _save_current_note(self):
         """Сохранить текст и позицию курсора активной заметки (если изменились).

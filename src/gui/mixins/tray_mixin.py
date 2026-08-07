@@ -52,6 +52,9 @@ class TrayMixin:
         save_note = getattr(self, "_save_current_note", None)
         if save_note is not None:
             save_note()  # сохранить редактируемую заметку (текст + позицию курсора)
+        save_file = getattr(self, "_save_active_file", None)
+        if save_file is not None:
+            save_file()  # сохранить редактируемый файл каталога
         self.hotkey_manager.unregister()
         self.tray_icon.hide()
         QApplication.quit()
@@ -61,5 +64,8 @@ class TrayMixin:
         save_note = getattr(self, "_save_current_note", None)
         if save_note is not None:
             save_note()
+        save_file = getattr(self, "_save_active_file", None)
+        if save_file is not None:
+            save_file()
         event.ignore()
         self.minimize_to_tray()

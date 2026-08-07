@@ -98,6 +98,7 @@ class NotesPanel(QWidget):
         self._raw = ""
         self._name = ""
         self._edit = False
+        self._binary = False
         self._zoom = 0
         self._base_pt = self.body.font().pointSizeF() or 11.0
 
@@ -140,7 +141,7 @@ class NotesPanel(QWidget):
             return True
         return super().eventFilter(obj, event)
 
-    # ── показ заметки ───────────────────────────────────────────────
+    # ── показ заметки / файла каталога ─────────────────────────────
     def show_note(self, note):
         """Показать заметку в режиме preview (по умолчанию).
 
@@ -151,9 +152,29 @@ class NotesPanel(QWidget):
         self._note = note
         self._name = note.name
         self._raw = note.note
+        self._binary = False
         self.title_label.setText(note.name)
         self._edit = False
         self._render_preview()
+
+    def show_content(self, name: str, text: str, binary: bool = False):
+        """Показать произвольное содержимое (файл каталога) в preview.
+
+        binary=True — бинарный файл: только заглушка, редактирование недоступно.
+        """
+        self._note = None
+        self._name = name
+        self._raw = text
+        self._binary = binary
+        self.title_label.setText(name)
+        self._edit = False
+        if binary:
+            self.body.setReadOnly(True)
+            self.body.setPlainText(
+                "[Бинарный файл — F4 или контекстное меню: открыть внешним приложением]"
+            )
+        else:
+            self._render_preview()
 
     def clear(self):
         """Пустое состояние (ничего не выбрано)."""
@@ -161,6 +182,7 @@ class NotesPanel(QWidget):
         self._raw = ""
         self._name = ""
         self._edit = False
+        self._binary = False
         self.title_label.setText("Заметка")
         self.body.clear()
         self.body.setReadOnly(True)
@@ -183,6 +205,8 @@ class NotesPanel(QWidget):
 
     def enter_edit(self, caret: int = 0):
         """Режим редактирования: сырой текст, курсор восстанавливается."""
+        if self._binary:
+            return  # бинарный контент нельзя редактировать как текст
         self._edit = True
         self.body.setReadOnly(False)
         self._apply_zoom_font()
