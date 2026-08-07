@@ -1,10 +1,23 @@
 """Подсветка синтаксиса для движков (палитра под тёмную тему).
 
-BSL — ключевые слова 1С, директивы (&НаКлиенте), комментарии //, строки,
-числа. JSON — ключи, строки, числа, true/false/null.
+BSL — ключевые слова 1С (список — из config), директивы (&НаКлиенте),
+комментарии //, строки, числа. JSON — ключи, строки, числа, true/false/null.
+XML — теги, атрибуты, значения, комментарии.
 """
 
+import re
+
 from PySide6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
+
+try:
+    from config import BSL_KEYWORDS
+except ImportError:  # pragma: no cover — standalone (вне лаунчера)
+    BSL_KEYWORDS = [
+        "Процедура КонецПроцедуры Функция КонецФункции Если ИначеЕсли Иначе КонецЕсли "
+        "Тогда Для Каждого По Цикл КонецЦикла Пока Возврат Новый Перем Экспорт И Или Не "
+        "Истина Ложь Неопределено Попытка Исключение КонецПопытки Перейти Продолжить "
+        "Прервать Выполнить ВызватьИсключение ИначеИначе"
+    ].split()
 
 
 def _fmt(color: str, bold: bool = False) -> QTextCharFormat:
@@ -16,15 +29,13 @@ def _fmt(color: str, bold: bool = False) -> QTextCharFormat:
 
 
 class BslHighlighter(QSyntaxHighlighter):
-    """Подсветка BSL (1С) — тёмная тема."""
+    """Подсветка BSL (1С) — тёмная тема.
 
-    # Ключевые слова 1С
-    KEYWORDS = (
-        "Процедура КонецПроцедуры Функция КонецФункции Если ИначеЕсли Иначе КонецЕсли "
-        "Для Каждого По Цикл КонецЦикла Пока Возврат Новый Перем Экспорт И Или Не "
-        "Истина Ложь Неопределено Попытка Исключение КонецПопытки Перейти Продолжить "
-        "Прервать Выполнить ВызватьИсключение ИначеИначе"
-    ).split()
+    Ключевые слова берутся из config ([highlighting] bsl_keywords) — правка
+    без пересборки; если config недоступен — встроенный набор.
+    """
+
+    KEYWORDS = tuple(BSL_KEYWORDS)
 
     def __init__(self, document):
         super().__init__(document)
@@ -129,3 +140,31 @@ class JsonHighlighter(QSyntaxHighlighter):
                 i = j
                 continue
             i += 1
+
+
+class XmlHighlighter(QSyntaxHighlighter):
+    """Подсветка XML — тёмная тема (теги, атрибуты, значения, комментарии)."""
+
+    _TAG_RE = re.compile(r"</?[^>]*>")
+    _ATTR_RE = re.compile(r"""([\w:.-]+)\s*=\s*("[^"]*"|'[^']*')""")
+    _COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+
+    def __init__(self, document):
+        super().__init__(document)
+        self._tag_fmt = _fmt("#569CD6")       # <tag>
+        self._attr_fmt = _fmt("#9CDCFE")      # имя атрибута
+        self._value_fmt = _fmt("#CE9178")     # значение "..."
+        self._comment_fmt = _fmt("#6A8759")   # <!-- ... -->
+        self._text_fmt = _fmt("#D4D4D4")      # текст между тегами
+
+    def highlightBlock(self, text: str):
+        for m in self._TAG_RE.finditer(text):
+            start, end = m.span()
+            self.setFormat(start, end - start, self._tag_fmt)
+            for am in self._ATTR_RE.finditer(text, start, end):
+                self.setFormat(am.start(1), len(am.group(1)), self._attr_fmt)
+                self.setFormat(am.start(2), len(am.group(2)), self._value_fmt)
+        # комментарии — поверх тегов (иначе подсветятся как теги)
+        for m in self._COMMENT_RE.finditer(text):
+            start, end = m.span()
+            self.setFormat(start, end - start, self._comment_fmt)

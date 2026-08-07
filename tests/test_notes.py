@@ -518,3 +518,108 @@ def test_config_notes_path_default():
     # (устойчиво к тому, что оператор пропишет свой путь в [notes] path)
     settings = config.load_settings(config.find_config_file())
     assert config.NOTES_PATH == settings["notes"].get("path", "")
+
+def test_md_detection_image_placeholder_only(qt_app):
+    """Заметка, содержащая ТОЛЬКО placeholder картинки, рендерится как md
+    (иначе картинка не показывалась — «нажал F4 — ничего»)."""
+    from notes.engines import detect_engine
+    from notes.engines.md_engine import MarkdownEngine
+    from PySide6.QtWidgets import QTextEdit
+
+    assert detect_engine("Новая заметка", "![фото](noteimg:42)") == MarkdownEngine.name
+    assert "![" in MarkdownEngine.MARKERS
+
+
+def test_paste_image_without_active_note_no_corruption(qt_app):
+    """Вставка картинки при недоступном обработчике НЕ вставляет image-объект
+    (символ \\ufffc «затирал» текст заметки — заметка становилась пустой)."""
+    from PySide6.QtGui import QImage
+    from PySide6.QtCore import QMimeData
+    from notes.notes_panel import NotesPanel
+
+    panel = NotesPanel()
+    panel.enter_edit(caret=0)
+    panel.body.setPlainText("текст до вставки")
+    panel.body.image_handler = lambda img: ""  # обработчик «не сработал»
+    mime = QMimeData()
+    mime.setImageData(QImage(8, 8, QImage.Format.Format_ARGB32))
+    panel.body.insertFromMimeData(mime)
+    assert "\ufffc" not in panel.body.toPlainText()
+    assert panel.body.toPlainText() == "текст до вставки"  # текст не тронут
+
+
+def test_bsl_keywords_from_config(qt_app):
+    """Ключевые слова BSL — из config ([highlighting] bsl_keywords), включая «Тогда»."""
+    import config
+    from notes.engines.highlighters import BslHighlighter
+
+    assert "Тогда" in config.BSL_KEYWORDS
+    assert set(config.BSL_KEYWORDS) <= set(BslHighlighter.KEYWORDS)
+
+
+def test_bsl_method_navigator(qt_app):
+    """Навигатор: extract_bsl_methods + combo для bsl + переход курсора к методу."""
+    from PySide6.QtGui import QTextCursor
+    from notes.notes_panel import NotesPanel
+    from notes.notes_manager import Note
+    from notes.engines.bsl_engine import extract_bsl_methods
+
+    text = (
+        "Процедура Первая()\n"
+        "    // комментарий\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Функция Вторая(Парам)\n"
+        "    Возврат Истина;\n"
+        "КонецФункции\n"
+        "// Процедура НеМетод() — комментарий не матчится\n"
+    )
+    methods = extract_bsl_methods(text)
+    assert methods == [(1, "Процедура", "Первая"), (5, "Функция", "Вторая")]
+
+    panel = NotesPanel()
+    note = Note(id=1, pid=0, name="module.bsl", note=text, pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    assert not panel.methods_combo.isHidden()  # combo видим (не скрыт явно)
+    assert panel._method_lines == [1, 5]
+    panel._jump_to_method(1)  # вторая строка списка → метод «Вторая» (строка 5)
+    assert panel.body.textCursor().blockNumber() == 4
+
+
+def test_json_pretty_preview(qt_app):
+    """JSON на preview переформатируется (indent=2); невалидный — как есть."""
+    from PySide6.QtWidgets import QTextEdit
+    from notes.engines import get_engine
+
+    widget = QTextEdit()
+    get_engine("json").render(widget, '{"a":1,"b":[1,2]}', "x.json")
+    assert '  "a": 1' in widget.toPlainText()
+    assert "\n" in widget.toPlainText()
+    get_engine("json").render(widget, "{невалидный", "x.json")
+    assert widget.toPlainText() == "{невалидный"
+
+
+def test_xml_engine_pretty_and_detection(qt_app):
+    """XML: детекция по .xml, pretty-форматирование, подсветка."""
+    from PySide6.QtWidgets import QTextEdit
+    from notes.engines import detect_engine, get_engine
+    from notes.engines.xml_engine import XmlEngine
+    from notes.notes_panel import NotesPanel
+    from notes.notes_manager import Note
+
+    assert detect_engine("config.xml", "") == "xml"
+    assert isinstance(get_engine("xml"), XmlEngine)
+
+    widget = QTextEdit()
+    get_engine("xml").render(widget, "<root><a x=\"1\">t</a></root>", "x.xml")
+    assert "<root>" in widget.toPlainText()
+    assert "\n" in widget.toPlainText()  # переформатирован
+    get_engine("xml").render(widget, "<root>", "x.xml")  # невалидный
+    assert widget.toPlainText() == "<root>"
+
+    panel = NotesPanel()
+    note = Note(id=2, pid=0, name="a.xml", note="<r><c/></r>", pos=0,
+                created="", modified="", trash=0, type=0, caret=0)
+    panel.show_note(note)
+    assert panel._highlighter is not None  # XmlHighlighter включён

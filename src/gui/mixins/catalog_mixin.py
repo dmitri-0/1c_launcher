@@ -109,6 +109,10 @@ class CatalogMixin:
                     self.notes_panel.get_text(),
                     encoding=self._active_catalog_encoding,
                 )
+                # запомнить позицию курсора (переживает перезапуск, как у заметок)
+                set_caret = getattr(self.notes_manager, "set_path_caret", None)
+                if set_caret is not None:
+                    set_caret(self._active_catalog_path, self.notes_panel.current_caret())
         except Exception as e:
             print(f"Не удалось сохранить файл: {e}")
 
@@ -144,7 +148,9 @@ class CatalogMixin:
                 return True
             text = self.catalog_manager.read_text(f.path)
             if text is not None:
-                self.notes_panel.enter_edit(caret=0)
+                get_caret = getattr(self.notes_manager, "get_path_caret", None)
+                caret = get_caret(f.path) if get_caret is not None else 0
+                self.notes_panel.enter_edit(caret=caret)
                 self.notes_panel.focus_editor()
             else:
                 self._open_external(f.path)  # бинарный → внешнее приложение

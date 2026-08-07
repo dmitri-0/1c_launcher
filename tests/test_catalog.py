@@ -272,3 +272,17 @@ def test_note_document_loads_image_from_db(qt_app):
     finally:
         mgr.close()
         (Path(__import__("tempfile").gettempdir()) / "notes_test_tmp.db").unlink(missing_ok=True)
+
+def test_path_caret_persistence(tmp_path):
+    """Позиция курсора файла каталога сохраняется в meta БД заметок."""
+    from notes.notes_manager import NotesManager
+
+    mgr = NotesManager(tmp_path / "notes.db")
+    try:
+        assert mgr.get_path_caret(r"C:\work\module.bsl") == 0
+        mgr.set_path_caret(r"C:\work\module.bsl", 123)
+        assert mgr.get_path_caret(r"C:\work\module.bsl") == 123
+        mgr.set_path_caret(r"C:\work\module.bsl", 0)  # 0 не сохраняется
+        assert mgr.get_path_caret(r"C:\work\module.bsl") == 123
+    finally:
+        mgr.close()

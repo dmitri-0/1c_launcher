@@ -123,6 +123,10 @@ class NotesMixin:
         портативно и работает в exe-сборке).
         """
         if self.notes_manager is None or self._active_note_id is None:
+            try:
+                self.statusBar.showMessage("Вставка картинки: сначала выберите заметку (F4)", 3000)
+            except Exception:
+                pass
             return ""
         try:
             from PySide6.QtCore import QBuffer, QByteArray, QIODevice
@@ -204,6 +208,12 @@ class NotesMixin:
         try:
             note = self.notes_manager.get(self._active_note_id)
             if note is None:
+                return
+            # Панель показывает ДРУГОЙ контент (другую заметку / файл каталога):
+            # не перезаписываем чужую заметку текстом панели. Если панель вообще
+            # не показывает заметку (_note is None) — сохранять нечего.
+            panel_note = getattr(self.notes_panel, "_note", None)
+            if panel_note is None or panel_note.id != note.id:
                 return
             text = self.notes_panel.get_text()
             caret = self.notes_panel.current_caret() if self.notes_panel.is_edit_mode() else note.caret

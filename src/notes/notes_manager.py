@@ -266,6 +266,30 @@ class NotesManager:
                 "SELECT data FROM images WHERE id = ?", (image_id,)).fetchone()
         return bytes(row["data"]) if row else None
 
+    # ── позиция курсора для произвольных путей (файлы каталога) ─────
+    def get_path_caret(self, path: str) -> int:
+        """Сохранённая позиция курсора для пути (файл каталога) или 0."""
+        key = f"caret:{path}"
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        try:
+            return int(row["value"]) if row else 0
+        except (TypeError, ValueError):
+            return 0
+
+    def set_path_caret(self, path: str, pos: int) -> None:
+        """Запомнить позицию курсора для пути (файл каталога)."""
+        if pos <= 0:
+            return
+        key = f"caret:{path}"
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO meta(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(int(pos))),
+            )
+
     def close(self):
         with self._lock:
             self._conn.close()

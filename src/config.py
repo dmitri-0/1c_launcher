@@ -43,6 +43,16 @@ def _default_settings() -> dict:
             "modifiers": 0x0001,  # MOD_ALT
             "vk": 0x44,           # D
         },
+        "highlighting": {
+            # Ключевые слова BSL для подсветки (пробелораздельный список).
+            "bsl_keywords": (
+                "Процедура КонецПроцедуры Функция КонецФункции Если ИначеЕсли Иначе "
+                "КонецЕсли Тогда Для Каждого По Цикл КонецЦикла Пока Возврат Новый "
+                "Перем Экспорт И Или Не Истина Ложь Неопределено Попытка Исключение "
+                "КонецПопытки Перейти Продолжить Прервать Выполнить ВызватьИсключение "
+                "ИначеИначе"
+            ),
+        },
         "notes": {
             "path": "",  # пусто = %APPDATA%\1c_launcher\notes.db
             "panel_width_percent": 80,  # доля ширины окна для панели заметок
@@ -186,6 +196,17 @@ def _merge(settings: dict, data: dict) -> None:
         if "vk" in hotkey:
             settings["hotkey"]["vk"] = _parse_vk(hotkey["vk"])
 
+    highlighting = data.get("highlighting")
+    if isinstance(highlighting, dict):
+        if "bsl_keywords" in highlighting:
+            kw = highlighting["bsl_keywords"]
+            if isinstance(kw, (list, tuple)):
+                # TOML-массив строк тоже допустим: ["Процедура", "Функция", ...]
+                kw = " ".join(str(x) for x in kw)
+            kw = str(kw).strip()
+            if kw:
+                settings["highlighting"]["bsl_keywords"] = kw
+
     notes = data.get("notes")
     if isinstance(notes, dict):
         if "path" in notes:
@@ -286,6 +307,9 @@ GLOBAL_HOTKEY_VK = _SETTINGS["hotkey"]["vk"]
 
 # Путь к БД заметок (SQLite). Пустая строка = notes.db рядом с exe/модулем.
 NOTES_PATH = _SETTINGS["notes"].get("path", "")
+
+# Ключевые слова BSL для подсветки (из [highlighting] bsl_keywords).
+BSL_KEYWORDS = _SETTINGS["highlighting"]["bsl_keywords"].split()
 
 # Доля ширины окна для панели заметок (в процентах, 20–95).
 NOTES_PANEL_WIDTH_PERCENT = _SETTINGS["notes"].get("panel_width_percent", 80)

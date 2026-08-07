@@ -17,7 +17,7 @@ Zoom: кнопки [−][0][+] и Ctrl+колесо. При preview масшта
 from datetime import datetime
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QToolButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QToolButton, QComboBox,
 )
 from PySide6.QtGui import QTextCursor, QImage, QFont
 from PySide6.QtCore import Qt, QEvent
@@ -46,6 +46,10 @@ class NotesTextEdit(QTextEdit):
                 if placeholder:
                     self.textCursor().insertText(placeholder)
                     return
+                # Обработчик вернул "" (нет активной заметки / ошибка БД):
+                # НЕ вставляем сырой image-объект — Qt вставил бы символ-заглушку
+                # \ufffc, который «затирает» текст заметки (пустая заметка).
+                return
         super().insertFromMimeData(source)
 
 
@@ -65,6 +69,15 @@ class NotesPanel(QWidget):
         self.title_label = QLabel("Заметка")
         self.title_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
         header.addWidget(self.title_label, 1)
+
+        # Навигатор по методам BSL (как outline в VS Code): виден только
+        # для bsl-контента; выбор — курсор к методу.
+        self.methods_combo = QComboBox()
+        self.methods_combo.setVisible(False)
+        self.methods_combo.setMinimumWidth(160)
+        self.methods_combo.setToolTip("Методы BSL: выберите — курсор перейдёт к методу")
+        self.methods_combo.activated.connect(self._jump_to_method)
+        header.addWidget(self.methods_combo, 1)
 
         self._zoom_out_btn = QToolButton()
         self._zoom_out_btn.setText("−")
@@ -106,6 +119,7 @@ class NotesPanel(QWidget):
         self._zoom = max(_ZOOM_MIN, min(_ZOOM_MAX, int(initial_zoom)))
         self._highlighter = None
         self._base_pt = self.body.font().pointSizeF() or 11.0
+        self._method_lines: list = []  # номера строк методов (для навигатора)
 
     # ── вставка картинки из буфера ──────────────────────────────────
     @property
@@ -215,6 +229,39 @@ class NotesPanel(QWidget):
         self._apply_zoom_font()
         engine.render(self.body, self._raw, self._name)
         self._apply_highlighter(engine)
+        self._update_methods_navigator()
+
+    # ── навигатор по методам BSL ────────────────────────────────────
+    def _update_methods_navigator(self):
+        """Для bsl-контента заполняет выпадающий список методов; иначе прячет."""
+        from notes.engines.bsl_engine import extract_bsl_methods
+
+        self._method_lines = []
+        self.methods_combo.clear()
+        if detect_engine(self._name, self._raw) != "bsl":
+            self.methods_combo.setVisible(False)
+            return
+        methods = extract_bsl_methods(self._raw)
+        self._method_lines = [line for line, _, _ in methods]
+        for line, kind, name in methods:
+            self.methods_combo.addItem(f"{line:>4}  {kind} {name}()")
+        if methods:
+            self.methods_combo.setVisible(True)
+            self.methods_combo.setCurrentIndex(-1)
+        else:
+            self.methods_combo.setVisible(False)
+
+    def _jump_to_method(self, combo_index: int):
+        """Переместить курсор к методу из навигатора (номер строки — 1-based)."""
+        if not (0 <= combo_index < len(self._method_lines)):
+            return
+        line = self._method_lines[combo_index]
+        cursor = self.body.textCursor()
+        cursor.movePosition(QTextCursor.Start)
+        for _ in range(max(0, line - 1)):
+            cursor.movePosition(QTextCursor.Down)
+        self.body.setTextCursor(cursor)
+        self.body.ensureCursorVisible()
 
     def _apply_highlighter(self, engine: PreviewEngine):
         """Подсветка синтаксиса для движков с highlighter_cls (bsl/json);
@@ -251,6 +298,7 @@ class NotesPanel(QWidget):
         cursor = self.body.textCursor()
         cursor.setPosition(min(max(caret, 0), len(self._raw)))
         self.body.setTextCursor(cursor)
+        self._update_methods_navigator()  # навигатор работает и в редактировании
 
     def is_edit_mode(self) -> bool:
         return self._edit

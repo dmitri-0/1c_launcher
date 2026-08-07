@@ -15,6 +15,7 @@ from .md_engine import MarkdownEngine
 from .json_engine import JsonEngine
 from .bsl_engine import BslEngine
 from .image_engine import ImageEngine
+from .xml_engine import XmlEngine
 
 _ENGINES = {
     PlainTextEngine.name: PlainTextEngine(),
@@ -22,6 +23,7 @@ _ENGINES = {
     JsonEngine.name: JsonEngine(),
     BslEngine.name: BslEngine(),
     ImageEngine.name: ImageEngine(),
+    XmlEngine.name: XmlEngine(),
 }
 
 # Расширения файлов → движок (приоритет над эвристикой по содержимому)
@@ -38,6 +40,7 @@ _EXT_ENGINES = {
     ".bmp": ImageEngine.name,
     ".webp": ImageEngine.name,
     ".ico": ImageEngine.name,
+    ".xml": XmlEngine.name,
 }
 
 
@@ -72,6 +75,7 @@ __all__ = [
     "JsonEngine",
     "BslEngine",
     "ImageEngine",
+    "XmlEngine",
     "get_engine",
     "detect_engine",
 ]
